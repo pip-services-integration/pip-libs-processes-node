@@ -1,0 +1,57 @@
+{
+    "name": "pip-libs-processes-node",
+    "version": "1.0.0",
+    "author": "Conceptual Vision Consulting LLC",
+    "description": "Integration business process framework in Node.js",
+    "contributors": [
+        {
+            "name": "Sergey Seroukhov",
+            "email": "seroukhov@gmail.com"
+        }
+    ],
+    "main": "./obj/src/index.js",
+    "typings": "./obj/src/index.d.ts",
+    "keywords": [
+        "pip.services",
+        "mapping",
+        "microservice"
+    ],
+    "noAnalyze": true,
+    "repository": {
+        "type": "git",
+        "url": "ssh://git@github.com:pip-services-integration/pip-libs-processes-node.git"
+    },
+    "license": "MIT",
+    "engines": {
+        "node": ">=0.6.14"
+    },
+    "private": false,
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch",
+        "launch": "node run",
+        "relaunch": "tsc && node run",
+        "test": "mocha -t 5000 -R spec -u tdd --recursive ./obj/test",
+        "retest": "tsc && mocha -t 5000 -R spec -u tdd --recursive ./obj/test",
+        "benchmark": "matcha -R clean -I tdd ./obj/benchmark/run.js",
+        "rebenchmark": "tsc && matcha -R clean -I tdd ./obj/benchmark/run.js"
+    },
+    "dependencies": {
+        "pip-services3-commons-node": "^3.0.0",
+        "pip-services3-components-node": "^3.0.0",
+        "pip-services3-container-node": "^3.0.0",
+        "pip-services3-data-node": "^3.0.0",
+        "pip-services3-rpc-node": "^3.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "*",
+        "@types/lodash": "^4.0.0",
+        "@types/async": "^2.0.0",
+        "@types/chai": "*",
+        "@types/mocha": "*",
+        "restify": "^4.3.0",
+        "chai": "*",
+        "mocha": "*",
+        "pip-services-processstates-node": "git+https://github.com/pip-services-integration/pip-services-processstates-node.git"
+    }
+}
