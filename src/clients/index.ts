@@ -13,3 +13,4 @@ export { TestAdapterMemoryClient } from './TestAdapterMemoryClient';
 export { TestEntity } from './TestEntity';
 export { TestEntityGenerator } from './TestEntityGenerator';
 export { TestMessageType } from './TestMessageType';
+export { ClientParam } from "./ClientParam";

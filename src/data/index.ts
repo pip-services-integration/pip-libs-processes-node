@@ -1,5 +1,3 @@
-import { FilterParams } from 'pip-services3-commons-node';
-
 export { CapabilitiesMap } from './CapabilitiesMap';
 export { ChangeableRecord } from './ChangeableRecord';
 export { ChangeType } from './ChangeType';
