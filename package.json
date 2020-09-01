@@ -41,7 +41,11 @@
         "pip-services3-components-node": "^3.0.0",
         "pip-services3-container-node": "^3.0.0",
         "pip-services3-data-node": "^3.0.0",
-        "pip-services3-rpc-node": "^3.0.0"
+        "pip-services3-rpc-node": "^3.0.0",
+        "pip-services3-messaging-node": "^3.0.0",
+        "pip-clients-eventlog-node": "^1.0.0",
+        "pip-clients-settings-node": "^1.0.0",
+        "pip-clients-retries-node": "git+https://github.com/pip-services-integration/pip-clients-retries-node.git"
     },
     "devDependencies": {
         "@types/node": "*",
