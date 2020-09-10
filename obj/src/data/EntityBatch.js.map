@@ -1,0 +1,1 @@
+{"version":3,"file":"EntityBatch.js","sourceRoot":"","sources":["../../../src/data/EntityBatch.ts"],"names":[],"mappings":";;AAAA,MAAa,WAAW;IAIpB,YAAmB,UAAkB,IAAI,EAAE,WAAgB,IAAI;QAC3D,IAAI,CAAC,QAAQ,GAAG,OAAO,CAAC;QACxB,IAAI,CAAC,QAAQ,GAAG,QAAQ,IAAI,EAAE,CAAC;IACnC,CAAC;CACJ;AARD,kCAQC"}

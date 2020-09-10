@@ -37,25 +37,28 @@
         "rebenchmark": "tsc && matcha -R clean -I tdd ./obj/benchmark/run.js"
     },
     "dependencies": {
+        "pip-clients-eventlog-node": "^1.0.0",
+        "pip-clients-mappings-node": "git+https://github.com/pip-services-integration/pip-clients-mappings-node.git",
+        "pip-clients-processstates-node": "git+https://github.com/pip-services-integration/pip-clients-processstates-node.git",
+        "pip-clients-retries-node": "git+https://github.com/pip-services-integration/pip-clients-retries-node.git",
+        "pip-clients-settings-node": "^1.0.0",
+        "pip-clients-tempblobs-node": "git+https://github.com/pip-services-integration/pip-clients-tempblobs-node.git",
         "pip-services3-commons-node": "^3.0.0",
         "pip-services3-components-node": "^3.0.0",
         "pip-services3-container-node": "^3.0.0",
         "pip-services3-data-node": "^3.0.0",
-        "pip-services3-rpc-node": "^3.0.0",
         "pip-services3-messaging-node": "^3.0.0",
-        "pip-clients-eventlog-node": "^1.0.0",
-        "pip-clients-settings-node": "^1.0.0",
-        "pip-clients-retries-node": "git+https://github.com/pip-services-integration/pip-clients-retries-node.git"
+        "pip-services3-rpc-node": "^3.0.0"
     },
     "devDependencies": {
-        "@types/node": "*",
-        "@types/lodash": "^4.0.0",
         "@types/async": "^2.0.0",
         "@types/chai": "*",
+        "@types/lodash": "^4.0.0",
         "@types/mocha": "*",
-        "restify": "^4.3.0",
+        "@types/node": "^14.6.4",
         "chai": "*",
         "mocha": "*",
-        "pip-services-processstates-node": "git+https://github.com/pip-services-integration/pip-services-processstates-node.git"
+        "pip-services-processstates-node": "git+https://github.com/pip-services-integration/pip-services-processstates-node.git",
+        "restify": "^4.3.0"
     }
 }

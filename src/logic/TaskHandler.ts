@@ -1,6 +1,8 @@
+let async = require('async');
+
 import { IReferences, Descriptor } from 'pip-services3-commons-node';
 import { Parameters } from 'pip-services3-commons-node';
-import { CompositeLogger } from 'pip-services3-components-node';
+import { CompositeLogger, Timing } from 'pip-services3-components-node';
 import { CompositeCounters } from 'pip-services3-components-node';
 import { IMessageQueue } from 'pip-services3-messaging-node';
 import { MessageEnvelope } from 'pip-services3-messaging-node';
@@ -13,6 +15,8 @@ import { ISettingsClientV1 } from 'pip-clients-settings-node';
 import { ITaskHandler } from './ITaskHandler';
 import { Task } from './Task';
 import { ProcessParam } from './ProcessParam';
+import { ProcessLockedExceptionV1 } from 'pip-clients-processstates-node';
+import { TaskProcessStage } from './TaskProcessStage';
 
 // public class TaskHandler<T>: TaskHandler
 // {
@@ -43,24 +47,24 @@ export class TaskHandler implements ITaskHandler {
     public disabled: boolean;
     public correlationId: string;
 
-    public constructor(processType: string, taskType: string, taskClass: any, queue: IMessageQueue, 
+    public constructor(processType: string, taskType: string, taskClass: any, queue: IMessageQueue,
         references: IReferences, parameters: Parameters) {
         if (processType == null)
-            throw new Error("Process type cannot be null");
+            throw new Error('Process type cannot be null');
         if (taskType == null)
-            throw new Error("Task type cannot be null");
+            throw new Error('Task type cannot be null');
         if (taskClass == null)
-            throw new Error("Task class cannot be null");
+            throw new Error('Task class cannot be null');
         if (queue == null)
-            throw new Error("Queue cannot be null");
+            throw new Error('Queue cannot be null');
         if (references == null)
-            throw new Error("References cannot be null");
+            throw new Error('References cannot be null');
 
         this.processType = processType;
         this.taskType = taskType;
         this.taskClass = taskClass;
         this.queue = queue;
-        this.name = processType + "." + taskType;
+        this.name = processType + '.' + taskType;
 
         this.setParameters(parameters);
         this.setReferences(references);
@@ -97,18 +101,38 @@ export class TaskHandler implements ITaskHandler {
     }
 
     public listen(callback: (err: any) => void): void {
-        while (!this._cancel) {
-            if (!this.disabled) {
-                this._logger.info(this.correlationId, "Started task %s listening at %s", this.name, this.queue.getName());
+        async.whilst(
+            () => !this._cancel,
+            (callback) => {
+                let disabled = this.disabled;
+                async.series([
+                    (callback) => {
+                        if (!disabled) {
+                            this._logger.info(this.correlationId, 'Started task %s listening at %s', this.name, this.queue.getName());
 
-                // Start listening on the queue
-                this.queue.listen(this.correlationId, this);
+                            // Start listening on the queue
+                            this.queue.listen(this.correlationId, this);
 
-                this._logger.info(this.correlationId, "Stopped task %s listening at %s", this.name, this.queue.getName());
-            } else {
-                await Task.Delay(TimeSpan.FromSeconds(30));
+                            this._logger.info(this.correlationId, 'Stopped task %s listening at %s', this.name, this.queue.getName());
+                        }
+
+                        callback();
+                    },
+                    (callback) => {
+                        if (disabled) {
+                            setTimeout(() => {
+                                callback();
+                            }, 30 * 1000);
+                        }
+                    }], (err) => {
+                        callback(err);
+                    }
+                )
+            },
+            (err) => {
+                if (callback) callback(err);
             }
-        }
+        );
     }
 
     public beginListen() {
@@ -117,17 +141,19 @@ export class TaskHandler implements ITaskHandler {
         });
     }
 
-    private createTask(message: MessageEnvelope, queue: IMessageQueue): Task {
-        var task = this.taskClass();
-        task.initialize(this.processType, this.taskType, message, queue, this.references, this.parameters);
-        return task;
+    private createTask(message: MessageEnvelope, queue: IMessageQueue,
+        callback: (err: any, task: Task) => void) {
+        var task = this.taskClass() as Task;
+        task.initialize(this.processType, this.taskType, message, queue, this.references, this.parameters, (err) => {
+            callback(err, task);
+        });
     }
 
-    private handlePoisonMessagesAsync(message: MessageEnvelope, queue: IMessageQueue, errorMessage: string,
+    private handlePoisonMessages(message: MessageEnvelope, queue: IMessageQueue, errorMessage: string,
         callback: (err: any) => void): void {
         // Remove junk
         //if (message.message_id == null || (message.message_type == null && message.message == null)) {
-        //    queue.moveToDeadLetterAsync(message, callback);
+        //    queue.moveToDeadLetter(message, callback);
         //    return;
         //}
 
@@ -137,8 +163,8 @@ export class TaskHandler implements ITaskHandler {
         }
 
         // Record attempt
-        let group = this.processType + ".attempt";
-        this._retriesClient.addRetry(this.correlationId, group, message.message_id, (err, retry) => {
+        let group = this.processType + '.attempt';
+        this._retriesClient.addRetry(this.correlationId, group, message.message_id, null, (err, retry) => {
             if (err != null) {
                 if (callback) callback(err);
                 return;
@@ -147,7 +173,7 @@ export class TaskHandler implements ITaskHandler {
             // Move to dead letter queue
             if (retry == null) {
                 this.queue.moveToDeadLetter(message, callback);
-            } else if (retry.numberOfAttempts >= this.maxNumberOfAttempts) {
+            } else if (retry.attempt_count >= this.maxNumberOfAttempts) {
                 queue.moveToDeadLetter(message, (err) => {
                     if (err != null) {
                         if (callback) callback(err);
@@ -156,14 +182,14 @@ export class TaskHandler implements ITaskHandler {
 
                     if (this._eventLogClient != null) {
                         // Log warning
-                        this._eventLogClient.logEvent(message.correlationId ?? this.correlationId,
-                            <SystemEventV1> {
+                        this._eventLogClient.logEvent(message.correlation_id ?? this.correlationId,
+                            <SystemEventV1>{
                                 source: this.processType,
                                 type: EventLogTypeV1.Failure,
-                                correlation_id: message.correlationId ?? this.correlationId,
+                                correlation_id: message.correlation_id ?? this.correlationId,
                                 time: new Date(),
                                 severity: EventLogSeverityV1.Informational,
-                                message: "After " + this.maxNumberOfAttempts + " attempts moved poison message " + message + " to dead queue"
+                                message: 'After ' + this.maxNumberOfAttempts + ' attempts moved poison message ' + message + ' to dead queue'
                             }
                         );
                     } else {
@@ -174,78 +200,100 @@ export class TaskHandler implements ITaskHandler {
         });
     }
 
-    public async Task ReceiveMessageAsync(MessageEnvelop message, IMessageQueue queue)
-    {
-        var leaseTimeout = Parameters.GetAsTimeSpanWithDefault("QueueLeaseTime", TimeSpan.FromMinutes(2));
-        if(leaseTimeout < TimeSpan.FromSeconds(30))
-        {
-            leaseTimeout = TimeSpan.FromSeconds(30);
+    public receiveMessage(message: MessageEnvelope, queue: IMessageQueue,
+        callback: (err: any) => void) {
+        var leaseTimeout = this.parameters.getAsIntegerWithDefault('QueueLeaseTime', 2 * 60 * 1000);
+        if (leaseTimeout < 30 * 1000) {
+            leaseTimeout = 30 * 1000;
         }
-        await queue.RenewLockAsync(message, (long)leaseTimeout.TotalMilliseconds);
 
-        // Make sure that message has CorrelationId because it will be used to tie it to process
-        message.CorrelationId = message.CorrelationId ?? Guid.NewGuid().ToString("N").Replace("-", "");
+        var task: Task;
+        var timing: Timing;
 
-        // Create the task for every message to ensure nothing affects its state between calls
-        var task = CreateTask(message, queue);
+        async.series([
+            (callback) => {
+                queue.renewLock(message, leaseTimeout, callback);
+            },
+            (callback) => {
+                this.createTask(message, queue, (err, result) => {
+                    task = result;
+                    callback(err);
+                });
+            },
+            (callback) => {
+                timing = this._counters.beginTiming(this.name + '.exec_time');
 
-        var timing = Counters.BeginTiming(Name + ".exec_time");
-        try
-        {
-            Counters.IncrementOne(Name + ".call_count");
-            Logger.Debug(message.CorrelationId ?? CorrelationId, "Started task {0} with {1}", Name, message);
+                this._counters.incrementOne(this.name + '.call_count');
+                this._logger.debug(message.correlation_id ?? this.correlationId, 'Started task %s with %s', this.name, message);
 
-            // Execute the task
-            await task.ExecuteAsync();
-
-            Logger.Debug(message.CorrelationId ?? CorrelationId, "Completed task {0}", Name);
-        }
-        catch (ProcessLockedException)
-        {
-            // Do nothing. Wait and retry
-        }
-        catch (Exception ex)
-        {
-            // If message wasn't processed the record it as attempt
-            if (message.Reference != null)
-            {
-                // If process was started but not completed, use compensation
-                if (task.ProcessStage == TaskProcessStage.Processing && task.ProcessStatus != null)
-                {
-                    try
-                    {
-                        // For exceeded number of attempts
-                        if (task.ProcessStatus.AttemptCount >= MaxNumberOfAttempts)
-                            await task.FailProcessAsync(ex.Message);
-                        // For starting processs without key fail and retry
-                        else
-                            await task.FailAndCompensateProcessAsync(ex.Message, Queue.Name, message);
+                // Execute the task
+                task.execute((err) => {
+                    if (!err) {
+                        this._logger.debug(message.correlation_id ?? this.correlationId, 'Completed task %s', this.name);
                     }
-                    catch
-                    {
-                        await HandlePoisonMessagesAsync(message, queue, ex.Message);
-                    }
-                }
-                // Otherwise treat it as a poison message
-                else
-                {
-                    await HandlePoisonMessagesAsync(message, queue, ex.Message);
-                }
+                    callback(err);
+                });
             }
+        ], (ex) => {
+            let processLockedException = ex as ProcessLockedExceptionV1;
 
-            Counters.IncrementOne(Name + ".attempt_count");
-            Logger.Error(message.CorrelationId ?? CorrelationId, ex, "Execution of task {0} failed", Name);
-        }
-        finally
-        {
-            timing.EndTiming();
-        }
+            async.series([
+                (callback) => {
+                    if (processLockedException) {
+                        // Do nothing. Wait and retry
+                        callback();
+                        return;
+                    }
+
+                    // If message wasn't processed the record it as attempt
+                    if (message.getReference() != null) {
+                        // If process was started but not completed, use recovery
+                        if (task.processStage == TaskProcessStage.Processing && task.processState != null) {
+                            // For exceeded number of attempts
+                            if ((task.processState.recovery_attempts ?? 0) >= this.maxNumberOfAttempts)
+                                task.failProcess(ex.message, (err) => {
+                                    if (!err) {
+                                        this.handlePoisonMessages(message, queue, ex.message, callback);
+                                        return;
+                                    }
+
+                                    callback();
+                                    return;
+                                });
+                            // For starting processs without key fail and retry
+                            else
+                                task.failAndRecoverProcess(ex.message, this.queue.getName(), message, null, (err) => {
+                                    if (!err) {
+                                        this.handlePoisonMessages(message, queue, ex.message, callback);
+                                        return;
+                                    }
+
+                                    callback();
+                                    return;
+                                });
+                        }
+
+                        callback();
+                    }
+                    // Otherwise treat it as a poison message
+                    else {
+                        this.handlePoisonMessages(message, queue, ex.message, callback);
+                    }
+                }
+            ], (err) => {
+                this._counters.incrementOne(name + '.attempt_count');
+                this._logger.error(message.correlation_id ?? this.correlationId, ex, 'Execution of task {0} failed', name);
+
+                timing.endTiming();
+                callback(err);
+            });
+        });
     }
 
-    public closeAsync(correlationId: string, callback: (err: any) => void): void {
+    public close(correlationId: string, callback: (err: any) => void): void {
         this._cancel = true;
         this.queue.close(correlationId, (err) => {
-            this._logger.debug(correlationId, "Stopped task %s listening at %s", this.name, this.queue.getName());
+            this._logger.debug(correlationId, 'Stopped task %s listening at %s', this.name, this.queue.getName());
             if (callback) callback(err);
         });
     }

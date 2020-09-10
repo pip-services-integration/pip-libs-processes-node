@@ -1,0 +1,1 @@
+{"version":3,"file":"NullTask.js","sourceRoot":"","sources":["../../../src/logic/NullTask.ts"],"names":[],"mappings":";;AAAA,iCAA8B;AAE9B,MAAa,QAAS,SAAQ,WAAI;IACvB,OAAO,CAAC,QAA4B;QACvC,IAAI,CAAC,OAAO,CAAC,KAAK,CAAC,IAAI,EAAE,qBAAqB,EAAE,IAAI,CAAC,OAAO,CAAC,CAAC;QAC9D,QAAQ,CAAC,IAAI,CAAC,CAAC;IACnB,CAAC;CACJ;AALD,4BAKC"}
