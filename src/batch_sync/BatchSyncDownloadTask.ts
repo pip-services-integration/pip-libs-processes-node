@@ -19,7 +19,7 @@ export class BatchSyncDownloadTask<T> extends Task {
         var downloadResponseQueue = this._parameters.get(BatchSyncParam.DownloadResponseQueue) as IMessageQueue;
         var recoveryQueue = this._parameters.get(ProcessParam.RecoveryQueue) as IMessageQueue;
         var recoveryTimeout = this._parameters.getAsNullableInteger(ProcessParam.RecoveryTimeout);
-        var typeName = this.getTypeName<T>();
+        var entityType = this._parameters.getAsNullableString(ProcessParam.EntityType);
 
         let startSyncTimeUtc: Date;
         let stopSyncTimeUtc: Date = new Date();
@@ -32,7 +32,7 @@ export class BatchSyncDownloadTask<T> extends Task {
                 });
             },
             (callback) => {
-                this.getStartSyncTimeUtcAsync((err, date) => {
+                this.getStartSyncTimeUtc((err, date) => {
                     startSyncTimeUtc = date;
                     callback(err);
                 });
@@ -40,9 +40,7 @@ export class BatchSyncDownloadTask<T> extends Task {
             (callback) => {
                 this.setProcessData(BatchSyncParam.LastSyncTimeUtc, startSyncTimeUtc);
                 this.setProcessData(BatchSyncParam.StopSyncTimeUtc, stopSyncTimeUtc);
-                callback();
-            },
-            (callback) => {
+
                 let incremental: boolean = this._parameters.getAsBooleanWithDefault(BatchSyncParam.IncrementalChanges, false);
                 async.series([
                     (callback) => {
@@ -53,14 +51,14 @@ export class BatchSyncDownloadTask<T> extends Task {
 
                             let downloadAdapter = this._parameters.getAsObject(BatchSyncParam.DownloadAdapter) as IBatchChangesClient<T>;
                             downloadAdapter.downloadChanges(this.processId, filter, startSyncTimeUtc, stopSyncTimeUtc, downloadResponseQueue.getName(), null, (err) => {
-                                this._logger.info(this.processId, 'Requested to download changes %s', typeName);
+                                this._logger.info(this.processId, 'Requested to download changes %s', entityType);
                                 callback(err);
                             });
                         }
                         else {
                             let downloadAdapter = this._parameters.getAsObject(BatchSyncParam.DownloadAdapter) as IBatchAllClient<T>;
                             downloadAdapter.downloadAll(this.processId, downloadResponseQueue.getName(), null, (err) => {
-                                this._logger.info(this.processId, 'Requested to download all %s', typeName);
+                                this._logger.info(this.processId, 'Requested to download all %s', entityType);
                                 callback(err);
                             });
                         }
@@ -71,7 +69,9 @@ export class BatchSyncDownloadTask<T> extends Task {
                             recoveryQueue.getName(),
                             new MessageEnvelope(this.processId, BatchSyncMessage.RecoveryDownload, []),
                             recoveryTimeout,
-                            callback
+                            (err) => {
+                                callback(err);
+                            }
                         );
                     },
                 ], (err) => {
@@ -79,8 +79,8 @@ export class BatchSyncDownloadTask<T> extends Task {
                 })
             }
         ], (err) => {
-            let processAlreadyExistException = err as ProcessAlreadyExistExceptionV1;
-            if (processAlreadyExistException) {
+            //if (err instanceof ProcessAlreadyExistExceptionV1) {
+            if (this.checkErrorType(err, ProcessAlreadyExistExceptionV1)) {
                 this._logger.error(this.correlationId, err, 'Process %s already running. Wait until it is completed then start a new one', this.name);
                 this.completeMessage(callback);
                 return;
@@ -90,10 +90,12 @@ export class BatchSyncDownloadTask<T> extends Task {
         });
     }
 
-    private getStartSyncTimeUtcAsync(callback: (err: any, date: Date) => void) {
+    private getStartSyncTimeUtc(callback: (err: any, date: Date) => void) {
         // Read settings section
-        if (this.statusSection == null)
-            throw new Error('Settings section parameter is required');
+        if (this.statusSection == null) {
+            callback(new Error('Settings section parameter is required'), null);
+            return;
+        }
 
         var initialSyncInterval = this._parameters.getAsIntegerWithDefault(
             BatchSyncParam.InitialSyncInterval, this.defaultInitialSyncInterval);
@@ -108,7 +110,7 @@ export class BatchSyncDownloadTask<T> extends Task {
                 this._settingsClient.getSectionById(this.correlationId, this.statusSection, (err, parameters) => {
                     startSyncTimeUtc = parameters.getAsDateTimeWithDefault(BatchSyncParam.LastSyncTimeUtc, defaultStartTimeUtc);
                     callback(err);
-                })
+                });
             },
             (callback) => {
                 // In case when start sync time is not valid
@@ -117,6 +119,9 @@ export class BatchSyncDownloadTask<T> extends Task {
                     this.writeSettingsKey(this.statusSection, BatchSyncParam.LastSyncTimeUtc, startSyncTimeUtc, (err, settings) => {
                         callback(err);
                     });
+                }
+                else {
+                    callback();
                 }
             },
         ], (err) => {

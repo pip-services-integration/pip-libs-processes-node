@@ -4,7 +4,7 @@ import { Process } from '../logic/Process';
 import { IReadWriteClient } from '../clients/IReadWriteClient';
 import { MessageGenerator } from '../generators/MessageGenerator';
 import { IMessageQueue } from 'pip-services3-messaging-node';
-import { IReferences } from 'pip-services3-commons-node';
+import { IReferences, ConfigParams } from 'pip-services3-commons-node';
 import { Parameters } from 'pip-services3-commons-node';
 import { ChangesTransferParam } from './ChangesTransferParam';
 import { ProcessParam } from '../logic/ProcessParam';
@@ -41,7 +41,7 @@ export class SequenceTransferProcess<T, K> extends Process {
         this._pollAdapter = this.parameters.get(ChangesTransferParam.PollAdapter) as IReadWriteClient<T, K>;
 
         // BEaton: my guess is that _pollAdapter is defined here so the two current subclasses can use it directly.
-        //  But some SequenceTransfer workflows transfer from a queue directly, and don't need a poll adapter. So
+        //  But some SequenceTransfer processes transfer from a queue directly, and don't need a poll adapter. So
         //  don't choke if it doesn't exist (those that need it, will need to define it, and those that don't, won't)
         // if (_pollAdapter == null)
         //     throw new ArgumentException('PollAdapter is not defined or doesn't implement IReadWrite client interface');
@@ -99,11 +99,11 @@ export class SequenceTransferProcess<T, K> extends Process {
     private createTasks() {
         for (var index = 0; index < this._transferQueues.length; index++) {
             var initial = index == 0;
-            var final = index == this._transferQueues.length - 1;
+            var final = index == (this._transferQueues.length - 1);
 
             var parameters = Parameters.fromTuples(
-                ProcessParam.IsInitial, initial,
-                ProcessParam.IsFinal, final,
+                ProcessParam.IsInitial, initial.toString(),
+                ProcessParam.IsFinal, final.toString(),
                 ChangesTransferParam.ProcessKeyPrefix, '',
                 ChangesTransferParam.PostAdapter, this._postAdapters[index],
                 ChangesTransferParam.TransferQueue, !final ? this._transferQueues[index + 1] : null
@@ -111,6 +111,7 @@ export class SequenceTransferProcess<T, K> extends Process {
 
             this.addTask<ChangePostTask<T, K>>(
                 'Post' + (index + 1),
+                ChangePostTask,
                 this._transferQueues[index],
                 -1,
                 parameters

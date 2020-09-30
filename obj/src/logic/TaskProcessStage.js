@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.TaskProcessStage = void 0;
 class TaskProcessStage {
 }
 exports.TaskProcessStage = TaskProcessStage;

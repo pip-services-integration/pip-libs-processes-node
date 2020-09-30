@@ -18,17 +18,9 @@ import { ProcessParam } from './ProcessParam';
 import { ProcessLockedExceptionV1 } from 'pip-clients-processstates-node';
 import { TaskProcessStage } from './TaskProcessStage';
 
-// public class TaskHandler<T>: TaskHandler
-// {
-//     public TaskHandler(string processType, string taskType, IMessageQueue queue,
-//         IReferences references, Parameters parameters)
-//         : base(processType, taskType, typeof(T), queue, references, parameters)
-//     { }
-// }
-
 export class TaskHandler implements ITaskHandler {
     public maxNumberOfAttempts: number = 5;
-    private _cancel: boolean = false;
+    protected _cancel: boolean = false;
     private _references: IReferences;
     private _logger: CompositeLogger = new CompositeLogger();
     private _counters: CompositeCounters = new CompositeCounters();
@@ -143,7 +135,7 @@ export class TaskHandler implements ITaskHandler {
 
     private createTask(message: MessageEnvelope, queue: IMessageQueue,
         callback: (err: any, task: Task) => void) {
-        var task = this.taskClass() as Task;
+        var task = (new this.taskClass()) as Task;
         task.initialize(this.processType, this.taskType, message, queue, this.references, this.parameters, (err) => {
             callback(err, task);
         });
@@ -235,11 +227,12 @@ export class TaskHandler implements ITaskHandler {
                 });
             }
         ], (ex) => {
-            let processLockedException = ex as ProcessLockedExceptionV1;
+            //let processLockedException = ex instanceof ProcessLockedExceptionV1;
+            var processLockedException = this.checkErrorType(ex, ProcessLockedExceptionV1);
 
             async.series([
                 (callback) => {
-                    if (processLockedException) {
+                    if (processLockedException || !ex) {
                         // Do nothing. Wait and retry
                         callback();
                         return;
@@ -252,28 +245,27 @@ export class TaskHandler implements ITaskHandler {
                             // For exceeded number of attempts
                             if ((task.processState.recovery_attempts ?? 0) >= this.maxNumberOfAttempts)
                                 task.failProcess(ex.message, (err) => {
-                                    if (!err) {
+                                    if (err) {
                                         this.handlePoisonMessages(message, queue, ex.message, callback);
                                         return;
                                     }
 
                                     callback();
-                                    return;
                                 });
                             // For starting processs without key fail and retry
                             else
                                 task.failAndRecoverProcess(ex.message, this.queue.getName(), message, null, (err) => {
-                                    if (!err) {
+                                    if (err) {
                                         this.handlePoisonMessages(message, queue, ex.message, callback);
                                         return;
                                     }
 
                                     callback();
-                                    return;
                                 });
                         }
-
-                        callback();
+                        else {
+                            callback();
+                        }
                     }
                     // Otherwise treat it as a poison message
                     else {
@@ -281,8 +273,10 @@ export class TaskHandler implements ITaskHandler {
                     }
                 }
             ], (err) => {
-                this._counters.incrementOne(name + '.attempt_count');
-                this._logger.error(message.correlation_id ?? this.correlationId, ex, 'Execution of task {0} failed', name);
+                if (ex) {
+                    this._counters.incrementOne(this.name + '.attempt_count');
+                    this._logger.error(message.correlation_id ?? this.correlationId, ex, 'Execution of task %s failed', this.name);
+                }
 
                 timing.endTiming();
                 callback(err);
@@ -298,4 +292,12 @@ export class TaskHandler implements ITaskHandler {
         });
     }
 
+    protected checkErrorType(err: any, errorClass: any): boolean {
+        var typedError = new errorClass();
+
+        var typedErrorCode = typedError && typedError.hasOwnProperty('code') ? typedError['code'] : null;
+        var errCode = err && err.hasOwnProperty('code') ? err['code'] : null;
+
+        return typedErrorCode != null && errCode != null && typedErrorCode === errCode;
+    }
 }

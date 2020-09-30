@@ -11,4 +11,5 @@ export declare class ProcessParam {
     static readonly Disabled: string;
     static readonly SimulationInterval: string;
     static readonly MaxNumberOfAttempts: string;
+    static readonly EntityType: string;
 }

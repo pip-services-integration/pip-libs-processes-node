@@ -10,6 +10,8 @@ export class EntityNotFoundException extends NotFoundException {
 	 */
 	public constructor(correlationId: string = null, entityId: string = null, message: string = null) {
         super(correlationId, 'ENTITY_NOT_FOUND', message || 'Entity with id ' + entityId + ' was not found');
-        this.withDetails('entity_id', entityId);
+		this.withDetails('entity_id', entityId);
+		
+		Object.setPrototypeOf(this, EntityNotFoundException.prototype);
 	}
 }

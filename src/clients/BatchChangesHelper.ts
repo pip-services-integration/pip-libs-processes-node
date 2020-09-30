@@ -13,7 +13,7 @@ import { ITempBlobsClientV1 } from 'pip-clients-tempblobs-node';
 import { DataChange } from "../data/DataChange";
 import { ChangeType } from "../data/ChangeType";
 import { IChangeable, RequestConfirmation } from "../data";
-import { IMessageQueue } from "pip-services3-messaging-node";
+import { IMessageQueue, MessageEnvelope } from "pip-services3-messaging-node";
 import { KnownDescriptors } from "../logic";
 
 export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchAllClient<T>, IReferenceable, IParameterized {
@@ -23,7 +23,7 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
         ClientParam.EntitiesPerBlob, 100,
         ClientParam.BlobTimeToLive, 24 * 60 * 60 * 1000, // 1 day
         ClientParam.DownloadChangesMessageType, "DownloadChangesResponse",
-        ClientParam.UploadChangesMessageType, "UploadChnagesResponse"
+        ClientParam.UploadChangesMessageType, "UploadChangesResponse"
     );
 
     private _references: IReferences;
@@ -84,12 +84,12 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
     }
 
     protected instrument(correlationId: string, methodName: string, message: string = ""): Timing {
-        this._logger.trace(correlationId ?? this.correlationId, "Called {0}.{1}.{2} {3}", this.adapter, this.service, methodName, message);
+        this._logger.trace(correlationId ?? this.correlationId, "Called %s.%s.%s %s", this.adapter, this.service, methodName, message);
         return this._counters.beginTiming(this.adapter + "." + this.service + "." + methodName + ".call_time");
     }
 
     protected handleError(correlationId: string, methodName: string, error: any): any {
-        this._logger.error(correlationId ?? this.correlationId, error, "Failed to call {0}.{1}.{2}", this.adapter, this.service, methodName);
+        this._logger.error(correlationId ?? this.correlationId, error, "Failed to call %s.%s.%s", this.adapter, this.service, methodName);
         return error;
     }
 
@@ -116,6 +116,9 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
 
         filter = filter ?? new FilterParams();
 
+        if (fromTime) filter.setAsObject("FromDateTime", fromTime);
+        if (toTime) filter.setAsObject("ToDateTime", toTime);
+
         var timing = this.instrument(correlationId, "downloadChanges", "with filter " + filter.toString() +
             " from " + StringConverter.toString(fromTime) + " to " + responseQueueName);
 
@@ -123,8 +126,7 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
         var chunk: T[] = [];
         var skip = 0;
 
-        async.whilst(
-            () => chunk.length < this.pageSize || chunk.length == 0,
+        async.doWhilst(
             (callback) => {
                 // Get a chunk
                 var paging = new PagingParams(skip, this.entitiesPerBlob, false);
@@ -137,90 +139,89 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
                     chunk = page.data ?? [];
                     skip += chunk.length;
 
-                    var changes: DataChange<T>[] = [];
-                    var now = new Date(Date.now());
+                    if (chunk.length == 0) {
+                        callback();
+                        return;
+                    }
 
-                    var i = 0;
-                    async.whilst(
-                        () => i < chunk.length,
-                        (callback) => {
-                            let entity = chunk[i];
-
-                            let changeType = ChangeType.Updated;
-                            let changeTime = now;
-                            let id: string = null;
-
-                            if (this.isChangeable(entity)) {
-                                if (entity.deleted)
-                                    changeType = ChangeType.Deleted;
-
-                                if (entity.create_time == entity.change_time)
-                                    changeType = ChangeType.Created;
-
-                                changeTime = entity.change_time;
-                            }
-
-                            // Clarify entity id
-                            if (this.isIdentifiable<K>(entity)) {
-                                let identifiable = entity as IIdentifiable<K>;
-                                id = identifiable.id.toString();
-                            }
-
-                            let change: DataChange<T> =
-                            {
-                                change_time: changeTime,
-                                data: entity,
-                                id: id,
-                                change_type: changeType
-                            };
-
-                            changes.push(change);
-                            i++;
-
-                            callback();
-                        },
-                        (err) => {
-                            if (err) {
-                                callback(err);
-                                return;
-                            }
-
-                            this._tempBlob.writeBlobAsObject(correlationId, changes, this.blobTimeToLive, (err, blobId) => {
-                                if (err) {
-                                    callback(err);
-                                    return;
-                                }
-
-                                blobIds.push(blobId);
-                                this._logger.trace(correlationId, "Downloaded {0} {1} into blob {2}", chunk.length, this.service, blobId);
-                                callback();
-                            });
+                    this.writeChunkToBlob(correlationId, chunk, (err, blobId) => {
+                        if (err) {
+                            callback(err);
+                            return;
                         }
-                    );
+
+                        blobIds.push(blobId);
+                        callback();
+                    });
                 });
+            },
+            () => chunk.length >= this.pageSize && chunk.length != 0,
+            (err) => {
+                this.sendConfirm(correlationId, this.downloadChangesMessageType, responseQueueName, requestId, err, blobIds, (err) => {
+                    timing.endTiming();
+                    callback(err);
+                });
+            }
+        );
+    }
+
+    private writeChunkToBlob(correlationId: string, chunk: T[], callback: (err: any, blobId: string) => void) {
+        var changes: DataChange<T>[] = [];
+        var now = new Date();
+
+        var i = 0;
+        async.whilst(
+            () => i < chunk.length,
+            (callback) => {
+                let entity = chunk[i];
+
+                let changeType = ChangeType.Updated;
+                let changeTime = now;
+                let id: string = null;
+
+                if (this.isChangeable(entity)) {
+                    if (entity.deleted)
+                        changeType = ChangeType.Deleted;
+
+                    if (entity.create_time == entity.change_time)
+                        changeType = ChangeType.Created;
+
+                    changeTime = entity.change_time;
+                }
+
+                // Clarify entity id
+                if (this.isIdentifiable<K>(entity)) {
+                    let identifiable = entity as IIdentifiable<K>;
+                    id = identifiable.id.toString();
+                }
+
+                let change: DataChange<T> = {
+                    change_time: changeTime,
+                    data: entity,
+                    id: id,
+                    change_type: changeType
+                };
+
+                changes.push(change);
+                i++;
+
+                callback();
             },
             (err) => {
                 if (err) {
-                    this._logger.error(correlationId, err, "Failed to download entity changes");
-
-                    // Send async fail confirmation
-                    if (responseQueueName != null) {
-                        let message = new RequestConfirmation();
-                        message.request_id = requestId;
-                        message.correlation_id = correlationId;
-                        message.blob_ids = blobIds;
-                        message.successful = false;
-                        message.error = err.message;
-
-                        var queue = this._references.getOneRequired<IMessageQueue>(KnownDescriptors.messageQueue(responseQueueName));
-                        queue.sendAsObject(correlationId, this.downloadChangesMessageType, message, (err) => {
-                            this._logger.trace(correlationId, "Sent download changes failure response");
-                        });
-                    }
+                    callback(err, null);
+                    return;
                 }
 
-                timing.endTiming();
-                callback(err);
+                this._tempBlob.writeBlobAsObject(correlationId, changes, this.blobTimeToLive, (err, blobId) => {
+                    if (err) {
+                        callback(err, null);
+                        return;
+                    }
+
+                    this._logger.trace(correlationId, "Downloaded %s %s into blob %s", chunk.length, this.service, blobId);
+                    callback(null, blobId);
+                });
             }
         );
     }
@@ -263,6 +264,11 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
                                     callback(err);
                                 });
                             }
+                            else {
+                                // skip unknown change types
+                                j++;
+                                callback();
+                            }
                         },
                         (err) => {
                             i++;
@@ -272,27 +278,46 @@ export class BatchChangesHelper<T, K> implements IBatchChangesClient<T>, IBatchA
                 });
             },
             (err) => {
-                if (err) {
-                    this._logger.debug(correlationId, "Uploaded {0} changes from {1} blobs", this.service, blobIds.length);
-
-                    // Send async confirmation
-                    if (responseQueueName != null) {
-                        var message = new RequestConfirmation();
-                        message.request_id = requestId;
-                        message.correlation_id = correlationId;
-                        message.blob_ids = blobIds;
-                        message.successful = true;
-
-                        var queue = this._references.getOneRequired<IMessageQueue>(KnownDescriptors.messageQueue(responseQueueName));
-                        queue.sendAsObject(correlationId, this.uploadChangesMessageType, message, (err) => {
-                            this._logger.trace(correlationId, "Send upload changes confirmation");
-                        });
-                    }
-                }
-
-                timing.endTiming();
-                callback(err);
+                this.sendConfirm(correlationId, this.uploadChangesMessageType, responseQueueName, requestId, err, blobIds, (err) => {
+                    timing.endTiming();
+                    callback(err);
+                });
             }
         );
+    }
+
+    private sendConfirm(correlationId: string, messageType: string, responseQueueName: string, requestId: string, err: any, blobIds: string[],
+        callback: (err?: any) => void) {
+
+        var actionType = messageType == this.downloadChangesMessageType ? "Download" : "Upload";
+        var actionDirection = messageType == this.downloadChangesMessageType ? "from" : "into";
+
+        if (err) this._logger.error(correlationId, err, "Failed to %s entity changes", actionType.toLowerCase());
+        else this._logger.debug(correlationId, "%sed %s changes %s %s blobs", actionType, this.service, actionDirection, blobIds.length);
+
+        // Send async confirmation
+        if (responseQueueName != null) {
+            let message = new RequestConfirmation();
+            message.request_id = requestId;
+            message.correlation_id = correlationId;
+            message.blob_ids = blobIds;
+            message.successful = true;
+
+            if (err) {
+                message.successful = false;
+                message.error = err.message;
+            }
+
+            var queue = this._references.getOneRequired<IMessageQueue>(KnownDescriptors.messageQueue(responseQueueName));
+            queue.sendAsObject(correlationId, messageType, message, (err1) => {
+                if (err) this._logger.trace(correlationId, "Sent %s changes failure response", actionType.toLowerCase());
+                else this._logger.trace(correlationId, "Sent %s changes confirmation", actionType.toLowerCase());
+                callback(err);
+            });
+
+            return;
+        }
+
+        callback();
     }
 }

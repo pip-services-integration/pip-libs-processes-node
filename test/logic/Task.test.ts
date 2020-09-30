@@ -2,10 +2,7 @@ let async = require('async');
 let assert = require('chai').assert;
 
 import { ConfigParams, Schema } from 'pip-services3-commons-node';
-import { Descriptor } from 'pip-services3-commons-node';
-import { References } from 'pip-services3-commons-node';
 import { Parameters } from 'pip-services3-commons-node';
-
 
 import { Task } from '../../src/logic/Task';
 import { MessageEnvelope, MemoryMessageQueue, IMessageQueue } from 'pip-services3-messaging-node';
@@ -15,54 +12,57 @@ import { KnownDescriptors } from '../../src/logic/KnownDescriptors';
 import { TaskProcessStage } from '../../src';
 
 suite('Abstract Task', () => {
-    var _activity: Task;
-    var _workflowType: string = "Test";
-    var _activityType = "Forward";
+    var _task: Task;
+    var _processType: string = "Test";
+    var _taskType = "Forward";
     var _message: MessageEnvelope = new MessageEnvelope(null, null, null);
-    var _references: ProcessMockReferences = new ProcessMockReferences([]);
+    var _references: ProcessMockReferences;
     var _queue: MemoryMessageQueue;
     var _parameters: Parameters = new Parameters();
 
     setup((done) => {
         _queue = new MemoryMessageQueue();
-        _activity = new ForwardMessageTask();
+        _task = new ForwardMessageTask();
+
+        _references = new ProcessMockReferences([]);
         _references.put(KnownDescriptors.messageQueue("Test.InputQueue"), _queue);
-        _activity.initialize(_workflowType, _activityType, _message, _queue, _references, _parameters, done);
+
+        _task.initialize(_processType, _taskType, _message, _queue, _references, _parameters, done);
     });
 
     teardown((done) => {
         done();
     });
 
-    test('It_Should_Throw_Exception_If_Activity_Type_Is_Null', (done) => {
-        _activity = new ForwardMessageTask();
-        _activity.initialize(_workflowType, null, _message, _queue, _references, _parameters, (err) => {
+    test('It_Should_Throw_Exception_If_Task_Type_Is_Null', (done) => {
+        _task = new ForwardMessageTask();
+        _task.initialize(_processType, null, _message, _queue, _references, _parameters, (err) => {
             assert.isNotNull(err);
             done();
         });
     });
 
-    test('It_Should_Throw_Exception_If_Workflow_Type_Is_Null', (done) => {
-        _activity = new ForwardMessageTask();
-        _activity.initialize(null, _activityType, _message, _queue, _references, _parameters, (err) => {
+    test('It_Should_Throw_Exception_If_Process_Type_Is_Null', (done) => {
+        _task = new ForwardMessageTask();
+        _task.initialize(null, _taskType, _message, _queue, _references, _parameters, (err) => {
             assert.isNotNull(err);
             done();
         });
     });
 
     test('It_Should_Throw_Exception_If_References_Is_Null', (done) => {
-        _activity = new ForwardMessageTask();
-        _activity.initialize(_workflowType, _activityType, _message, _queue, null, _parameters, (err) => {
+        _task = new ForwardMessageTask();
+        _task.initialize(_processType, _taskType, _message, _queue, null, _parameters, (err) => {
             assert.isNotNull(err);
             done();
         });
     });
 
-    test('It_Should_Initialize_Activity', (done) => {
-        _activity = new ForwardMessageTask();
-        _activity.initialize(_workflowType, _activityType, _message, _queue, _references, _parameters, (err) => {
+    test('It_Should_Initialize_Task', (done) => {
+        _task = new ForwardMessageTask();
+        _task.initialize(_processType, _taskType, _message, _queue, _references, _parameters, (err) => {
             assert.isNull(err);
-            assert.isNotNull(_activity);
+            assert.isNotNull(_task);
             done();
         });
 
@@ -96,38 +96,38 @@ suite('Abstract Task', () => {
         var references: ProcessMockReferences = new ProcessMockReferences([]);
         references.put(KnownDescriptors.messageQueue("Test.InputQueue"), messageQueueMock);
 
-        var activity = new ForwardMessageTask();
+        var task = new ForwardMessageTask();
 
         async.series([
             (callback) => {
-                activity.initialize(_workflowType, _activityType, _message, messageQueueMock, references, _parameters, (err) => {
+                task.initialize(_processType, _taskType, _message, messageQueueMock, references, _parameters, (err) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                activity.sendMessage("Test.InputQueue", "Any _message", (err) => {
+                task.sendMessage("Test.InputQueue", "Any _message", (err) => {
                     assert.isNull(err);
                     assert.equal(true, sent);
                     callback();
                 })
             },
             (callback) => {
-                activity.completeMessage((err) => {
+                task.completeMessage((err) => {
                     assert.isNull(err);
                     assert.equal(true, completed);
                     callback();
                 });
             },
             (callback) => {
-                activity.abandonMessage((err) => {
+                task.abandonMessage((err) => {
                     assert.isNull(err);
                     assert.equal(true, abandoned);
                     callback();
                 });
             },
             (callback) => {
-                activity.moveMessageToDead((err) => {
+                task.moveMessageToDead((err) => {
                     assert.isNull(err);
                     assert.equal(true, moved);
                     callback();
@@ -138,7 +138,7 @@ suite('Abstract Task', () => {
 
     test('It_Should_Throw_Exception_If_Message_Is_Null', (done) => {
         try {
-            _activity.validateMessage(null, new Schema());
+            _task.validateMessage(null, new Schema());
         }
         catch (err) {
             assert.equal('Message cannot be null', err.message);
@@ -147,125 +147,172 @@ suite('Abstract Task', () => {
         done();
     });
 
-    test('It_Should_Activate_Or_Start_Workflow', (done) => {
-        _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+    test('It_Should_Activate_Or_Start_Process', (done) => {
+        _task.activateOrStartProcessWithKey("Any key", (err, state) => {
             assert.isNull(err);
             done();
         });
     });
 
-    test('It_Should_Throw_Exception_If_Workflow_Key_Is_Null', (done) => {
-        _activity.activateOrStartProcessWithKey(null, (err, state) => {
+    test('It_Should_Throw_Exception_If_Process_Key_Is_Null', (done) => {
+        _task.activateOrStartProcessWithKey(null, (err, state) => {
             assert.isNotNull(err);
             done();
         })
     });
 
-    test('It_Should_Throw_Exception_If_Workflow_Key_Is_Null_During_Workflow_Activation', (done) => {
-        _activity.activateProcessWithKey(null, (err, state) => {
+    test('It_Should_Throw_Exception_If_Process_Key_Is_Null_During_Process_Activation', (done) => {
+        _task.activateProcessWithKey(null, (err, state) => {
             assert.isNotNull(err);
             done();
         });
     });
 
-    test('It_Should_Start_Workflow_And_Repeat_Workflow_Compensation', (done) => {
+    test('It_Should_Start_Process_And_Repeat_Process_Recovery', (done) => {
         async.series([
             (callback) => {
-                _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                _activity.repeatProcessRecovery(null, (err) => {
+                _task.repeatProcessRecovery(null, (err) => {
                     assert.isNull(err);
-                    assert.equal(TaskProcessStage.Processed, _activity.processStage);
+                    assert.equal(TaskProcessStage.Processed, _task.processStage);
                     callback();
                 });
             },
         ], done);
     });
 
-    test('It_Should_Start_Workflow_And_Fail_And_Continue_Workflow', (done) => {
+    test('It_Should_Start_Process_And_Fail_And_Continue_Process', (done) => {
         async.series([
             (callback) => {
-                _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                _activity.failAndContinueProcess("Error _message", (err) => {
+                _task.failAndContinueProcess("Error _message", (err) => {
                     assert.isNull(err);
-                    assert.equal(TaskProcessStage.Processed, _activity.processStage);
+                    assert.equal(TaskProcessStage.Processed, _task.processStage);
                     callback();
                 });
             },
         ], done);
     });
-    
-    test('It_Should_Start_Workflow_And_Fail_And_Retry_Workflow', (done) => {
+
+    test('It_Should_Start_Process_And_Fail_And_Retry_Process', (done) => {
         async.series([
             (callback) => {
-                _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                _activity.failAndRetryProcess("Error _message", (err) => {
+                _task.failAndRetryProcess("Error _message", (err) => {
                     assert.isNull(err);
-                    assert.equal(TaskProcessStage.Processed, _activity.processStage);
+                    assert.equal(TaskProcessStage.Processed, _task.processStage);
                     callback();
                 });
             },
         ], done);
     });
-    
-    test('It_Should_Start_Workflow_And_Abort_Workflow', (done) => {
+
+    test('It_Should_Start_Process_And_Abort_Process', (done) => {
         async.series([
             (callback) => {
-                _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                _activity.abortProcess("Error _message", (err) => {
+                _task.abortProcess("Error _message", (err) => {
                     assert.isNull(err);
-                    assert.equal(TaskProcessStage.Processed, _activity.processStage);
+                    assert.equal(TaskProcessStage.Processed, _task.processStage);
                     callback();
                 });
             },
         ], done);
     });
-    
-    test('It_Should_Start_Workflow_And_Rollback_Workflow', (done) => {
+
+    test('It_Should_Start_Process_And_Rollback_Process', (done) => {
         async.series([
             (callback) => {
-                _activity.activateOrStartProcessWithKey("Any key", (err, state) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
                     assert.isNull(err);
                     callback();
                 });
             },
             (callback) => {
-                _activity.rollbackProcess("Error _message", (err) => {
+                _task.rollbackProcess("Error _message", (err) => {
                     assert.isNull(err);
-                    assert.equal(TaskProcessStage.Processed, _activity.processStage);
+                    assert.equal(TaskProcessStage.Processed, _task.processStage);
                     callback();
                 });
             },
         ], done);
     });
-       
+
     test('It_Should_Write_And_Read_Settings', (done) => {
+        let settings = ConfigParams.fromTuples("param", "value");
 
-        done();
+        async.series([
+            (callback) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
+                    assert.isNull(err);
+                    callback();
+                });
+            },
+            (callback) => {
+                _task.writeSettings("Section", settings, (err, settings) => {
+                    assert.isNull(err);
+                    callback();
+                });
+            },
+            (callback) => {
+                _task.readSettings("Section", (err, result) => {
+                    assert.isNull(err);
+                    assert.equal(settings["param"], result["param"]);
+                    callback();
+                })
+            },
+        ], done);
     });
-       
-    test('It_Should_Add_Mapping_And_Map_Ids', (done) => {
 
-        done();
+    test('It_Should_Add_Mapping_And_Map_Ids', (done) => {
+        async.series([
+            (callback) => {
+                _task.activateOrStartProcessWithKey("Any key", (err, state) => {
+                    assert.isNull(err);
+                    callback();
+                });
+            },
+            (callback) => {
+                _task.addMapping("collection", "internalId", "externalId", null, (err) => {
+                    assert.isNull(err);
+                    callback();
+                });
+            },
+            (callback) => {
+                _task.mapToExternal("collection", "internalId", (err, externalId) => {
+                    assert.isNull(err);
+                    assert.equal("externalId", externalId);
+                    callback();
+                });
+            },
+            (callback) => {
+                _task.mapToInternal("collection", "internalId", (err, internalId) => {
+                    assert.isNull(err);
+                    assert.isNull(internalId);
+                    callback();
+                });
+            },
+        ], done);
     });
 });
 

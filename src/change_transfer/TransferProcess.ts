@@ -16,7 +16,7 @@ export class TransferProcess<T, K> extends Process {
     public constructor(processType: string, references: IReferences, parameters: Parameters) {
         super(processType, references, parameters);
 
-        // Define post activities
+        // Define post tasks
         var postAdapter = this.parameters.getAsObject(ChangesTransferParam.PostAdapter1);
         postAdapter = postAdapter ?? this.parameters.getAsObject(ChangesTransferParam.PostAdapter);
 
@@ -24,7 +24,7 @@ export class TransferProcess<T, K> extends Process {
         transferQueue = transferQueue ?? this.parameters.getAsObject(ChangesTransferParam.TransferQueue) as IMessageQueue;
 
         this.addTask<ChangePostTask<T, K>>(
-            "Post", transferQueue, -1,
+            "Post", ChangePostTask, transferQueue, -1,
             Parameters.fromTuples(
                 ProcessParam.IsInitial, true,
                 ProcessParam.IsFinal, true,

@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityRequestReviewException = void 0;
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 class EntityRequestReviewException extends pip_services3_commons_node_1.InvalidStateException {
     /**
@@ -12,6 +13,7 @@ class EntityRequestReviewException extends pip_services3_commons_node_1.InvalidS
     constructor(correlationId = null, entityId = null, message = null) {
         super(correlationId, 'ENTITY_REQUEST_REVIEW', message || 'Requested review for entity with id ' + entityId);
         this.withDetails('entity_id', entityId);
+        Object.setPrototypeOf(this, EntityRequestReviewException.prototype);
     }
 }
 exports.EntityRequestReviewException = EntityRequestReviewException;

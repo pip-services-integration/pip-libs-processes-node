@@ -1,13 +1,13 @@
 export class BatchSyncParam {
-    public static readonly StartQueue: string = "StartQueue";
-    public static readonly DownloadAdapter: string = "DownloadAdapter";
-    public static readonly DownloadResponseQueue: string = "DownloadResponseQueue";
-    public static readonly UploadAdapter: string = "UploadAdapter";
-    public static readonly UploadResponseQueue: string = "UploadResponseQueue";
-    public static readonly RecoveryQueue: string = "RecoveryQueue";
-    public static readonly IncrementalChanges: string = "IncrementalChanges";
-    public static readonly LastSyncTimeUtc: string = "LastSyncTimeUtc";
-    public static readonly StopSyncTimeUtc: string = "StopSyncTimeUtc";
-    public static readonly InitialSyncInterval: string = "InitialSyncInterval";
-    public static readonly DownloadResponseMessage: string = "DownloadResponseMessage";
+    public static readonly StartQueue: string = "start_queue";
+    public static readonly DownloadAdapter: string = "download_adapter";
+    public static readonly DownloadResponseQueue: string = "download_response_queue";
+    public static readonly UploadAdapter: string = "upload_adapter";
+    public static readonly UploadResponseQueue: string = "upload_response_queue";
+    public static readonly RecoveryQueue: string = "recovery_queue";
+    public static readonly IncrementalChanges: string = "incremental_changes";
+    public static readonly LastSyncTimeUtc: string = "lastSyncTimeUtc";
+    public static readonly StopSyncTimeUtc: string = "stop_sync_time_utc";
+    public static readonly InitialSyncInterval: string = "initial_sync_interval";
+    public static readonly DownloadResponseMessage: string = "download_response_message";
 }

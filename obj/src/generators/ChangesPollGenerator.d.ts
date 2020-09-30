@@ -7,16 +7,16 @@ export declare class ChangesPollGenerator<T, K> extends MessageGenerator {
     protected static readonly _defaultParameters: Parameters;
     protected _settingsClient: ISettingsClientV1;
     protected _tempBlobClient: ITempBlobsClientV1;
-    EntitiesPerRequest: number;
-    StatusSection: string;
-    InitialSyncInterval: number;
-    SyncDelay: number;
-    Filter: FilterParams;
-    LastSyncTimeUtc: Date;
+    entitiesPerRequest: number;
+    statusSection: string;
+    initialSyncInterval: number;
+    syncDelay: number;
+    filter: FilterParams;
+    lastSyncTimeUtc: Date;
     constructor(component: string, queue: IMessageQueue, references: IReferences, parameters?: Parameters);
     setReferences(references: IReferences): void;
     setParameters(parameters: Parameters): void;
     protected getFilter(): FilterParams;
-    protected getStartSyncTimeUtcAsync(callback: (err: any, result: Date) => void): void;
+    protected getStartSyncTimeUtc(callback: (err: any, result: Date) => void): void;
     execute(callback: (err: any) => void): void;
 }

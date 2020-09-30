@@ -1,16 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ChangesPollGenerator = void 0;
+const _ = require('lodash');
 let async = require('async');
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const MessageGenerator_1 = require("./MessageGenerator");
 const ChangesTransferParam_1 = require("../change_transfer/ChangesTransferParam");
 const GeneratorParam_1 = require("./GeneratorParam");
 const KnownDescriptors_1 = require("../logic/KnownDescriptors");
-const util_1 = require("util");
 class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
     constructor(component, queue, references, parameters = null) {
         super(component, 'Poll', queue, references, ChangesPollGenerator._defaultParameters.override(parameters));
-        this.StatusSection = this.Component + '.Status';
+        this.statusSection = this.component + '.Status';
     }
     setReferences(references) {
         super.setReferences(references);
@@ -20,43 +21,43 @@ class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
     setParameters(parameters) {
         super.setParameters(parameters);
         // Define additional parameters
-        this.MessageType = this.Parameters.getAsStringWithDefault(GeneratorParam_1.GeneratorParam.MessageType, this.MessageType);
-        this.EntitiesPerRequest = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.EntitiesPerRequest, this.EntitiesPerRequest);
-        this.InitialSyncInterval = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.InitialSyncInterval, this.InitialSyncInterval);
-        this.SyncDelay = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.SyncDelay, this.SyncDelay);
-        this.Filter = this.getFilter();
+        this.messageType = this.parameters.getAsStringWithDefault(GeneratorParam_1.GeneratorParam.MessageType, this.messageType);
+        this.entitiesPerRequest = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.EntitiesPerRequest, this.entitiesPerRequest);
+        this.initialSyncInterval = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.InitialSyncInterval, this.initialSyncInterval);
+        this.syncDelay = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.SyncDelay, this.syncDelay);
+        this.filter = this.getFilter();
     }
     getFilter() {
-        var filter = this.Parameters.get(ChangesTransferParam_1.ChangesTransferParam.Filter);
+        var filter = this.parameters.get(ChangesTransferParam_1.ChangesTransferParam.Filter);
         if (filter == null)
             return null;
-        if (util_1.isString(filter))
+        if (_.isString(filter))
             return pip_services3_commons_node_1.FilterParams.fromString(filter.toString());
         return new pip_services3_commons_node_1.FilterParams(filter);
     }
-    getStartSyncTimeUtcAsync(callback) {
+    getStartSyncTimeUtc(callback) {
         // Read settings section
-        if (this.StatusSection == null)
+        if (this.statusSection == null)
             throw new Error('Settings section parameter is required');
         // Define default value
-        var defaultStartTimeUtc = new Date(Date.now() - this.InitialSyncInterval);
+        var defaultStartTimeUtc = new Date(Date.now() - this.initialSyncInterval);
         // Read last sync time from status
-        this._settingsClient.getSectionById(this.CorrelationId, this.StatusSection, (err, settings) => {
+        this._settingsClient.getSectionById(this.correlationId, this.statusSection, (err, settings) => {
             if (err) {
                 if (callback)
                     callback(err, null);
                 return;
             }
-            this.LastSyncTimeUtc = settings.getAsDateTimeWithDefault('LastSyncTimeUtc', defaultStartTimeUtc);
+            this.lastSyncTimeUtc = settings.getAsDateTimeWithDefault('LastSyncTimeUtc', defaultStartTimeUtc);
             // Double checking...
-            if (this.LastSyncTimeUtc == null || this.LastSyncTimeUtc < defaultStartTimeUtc)
-                this.LastSyncTimeUtc = defaultStartTimeUtc;
+            if (this.lastSyncTimeUtc == null || this.lastSyncTimeUtc < defaultStartTimeUtc)
+                this.lastSyncTimeUtc = defaultStartTimeUtc;
             if (callback)
-                callback(null, this.LastSyncTimeUtc);
+                callback(null, this.lastSyncTimeUtc);
         });
     }
     execute(callback) {
-        if (this.EntitiesPerRequest <= 0) {
+        if (this.entitiesPerRequest <= 0) {
             if (callback)
                 callback(null);
             return;
@@ -65,20 +66,22 @@ class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
         var endSyncTimeUtc;
         async.series([
             (callback) => {
-                this.getStartSyncTimeUtcAsync((err, date) => {
+                this.getStartSyncTimeUtc((err, date) => {
+                    var _a;
+                    var syncDelay = (_a = this.syncDelay) !== null && _a !== void 0 ? _a : 0;
                     startSyncTimeUtc = date;
-                    endSyncTimeUtc = new Date(Date.now() - this.SyncDelay);
+                    endSyncTimeUtc = new Date(Date.now() - syncDelay);
                     callback(err);
                 });
             },
             (callback) => {
                 var _a;
                 // Get references
-                var pollAdapter = this.Parameters.getAsObject(ChangesTransferParam_1.ChangesTransferParam.PollAdapter);
-                var filter = (_a = this.Filter, (_a !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.FilterParams()));
+                var pollAdapter = this.parameters.getAsObject(ChangesTransferParam_1.ChangesTransferParam.PollAdapter);
+                var filter = (_a = this.filter) !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.FilterParams();
                 filter.setAsObject('FromDateTime', startSyncTimeUtc);
                 filter.setAsObject('ToDateTime', endSyncTimeUtc);
-                var maxPages = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.RequestsPerInterval, -1);
+                var maxPages = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.RequestsPerInterval, -1);
                 var polledEntities = 0;
                 var skip = 0;
                 var cancel = false;
@@ -86,10 +89,10 @@ class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
                     let page;
                     async.series([
                         (callback) => {
-                            pollAdapter.getByFilter(this.CorrelationId, filter, new pip_services3_commons_node_1.PagingParams(skip, this.EntitiesPerRequest, false), (err, data) => {
+                            pollAdapter.getByFilter(this.correlationId, filter, new pip_services3_commons_node_1.PagingParams(skip, this.entitiesPerRequest, false), (err, data) => {
                                 page = data;
                                 let typename = pollAdapter.constructor.name;
-                                this.Logger.debug(this.CorrelationId, '%s retrieved %s changes from %s', this.Name, page.data.length, typename);
+                                this.logger.debug(this.correlationId, '%s retrieved %s changes from %s', this.name, page.data.length, typename);
                                 callback(err);
                             });
                         },
@@ -98,13 +101,13 @@ class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
                                 let envelop;
                                 async.series([
                                     (callback) => {
-                                        this._tempBlobClient.writeBlobConditional(this.CorrelationId, entity, null, (err, data) => {
+                                        this._tempBlobClient.writeBlobConditional(this.correlationId, entity, null, (err, data) => {
                                             envelop = data;
                                             callback(err);
                                         });
                                     },
                                     (callback) => {
-                                        this.Queue.sendAsObject(this.CorrelationId, null, envelop, (err) => {
+                                        this.queue.sendAsObject(this.correlationId, null, envelop, (err) => {
                                             if (err) {
                                                 callback(err);
                                                 return;
@@ -126,25 +129,24 @@ class ChangesPollGenerator extends MessageGenerator_1.MessageGenerator {
                             maxPages--;
                             if (size == 0 || maxPages == 0) {
                                 cancel = true;
-                                callback();
-                                return;
                             }
-                            skip += this.EntitiesPerRequest;
+                            skip += this.entitiesPerRequest;
+                            callback();
                         },
                     ], (err) => {
                         callback(err);
                     });
                 }, (err) => {
                     // Update the last sync time
-                    this.LastSyncTimeUtc = endSyncTimeUtc;
+                    this.lastSyncTimeUtc = endSyncTimeUtc;
                     if (polledEntities > 0)
-                        this.Logger.info(this.CorrelationId, '%s retrieved and sent %s changes', this.Name, polledEntities);
+                        this.logger.info(this.correlationId, '%s retrieved and sent %s changes', this.name, polledEntities);
                     else
-                        this.Logger.info(this.CorrelationId, '%s found no changes', this.Name, polledEntities);
-                    if (this.StatusSection != null) {
-                        let updateParams = pip_services3_commons_node_1.ConfigParams.fromTuples('LastSyncTimeUtc', this.LastSyncTimeUtc);
+                        this.logger.info(this.correlationId, '%s found no changes', this.name, polledEntities);
+                    if (this.statusSection != null) {
+                        let updateParams = pip_services3_commons_node_1.ConfigParams.fromTuples('LastSyncTimeUtc', this.lastSyncTimeUtc);
                         let incrementParams = polledEntities > 0 ? pip_services3_commons_node_1.ConfigParams.fromTuples('PolledEntities', polledEntities) : null;
-                        this._settingsClient.modifySection(this.CorrelationId, this.StatusSection, updateParams, incrementParams, (err, parameters) => {
+                        this._settingsClient.modifySection(this.correlationId, this.statusSection, updateParams, incrementParams, (err, parameters) => {
                             callback(err);
                         });
                     }

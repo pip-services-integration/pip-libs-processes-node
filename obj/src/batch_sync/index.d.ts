@@ -1,7 +1,3 @@
-export { BatchMultiSyncCloseTask } from './BatchMultiSyncCloseTask';
-export { BatchMultiSyncForwardMessageTask } from './BatchMultiSyncForwardMessageTask';
-export { BatchMultiSyncParam } from './BatchMultiSyncParam';
-export { BatchMultiSyncProcess } from './BatchMultiSyncProcess';
 export { BatchSyncCloseTask } from './BatchSyncCloseTask';
 export { BatchSyncDownloadTask } from './BatchSyncDownloadTask';
 export { BatchSyncMessage } from './BatchSyncMessage';

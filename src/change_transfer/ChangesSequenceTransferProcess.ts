@@ -11,7 +11,7 @@ export class ChangesSequenceTransferProcess<T, K> extends SequenceTransferProces
     {
         super(processType, references, parameters);
 
-        // this sub-class uses _pollAdapter from the SequenceTransferWorkflow class and it is required here
+        // this sub-class uses _pollAdapter from the SequenceTransferProcess class and it is required here
         if (this._pollAdapter == null)
             throw new Error('PollAdapter is not defined or doesn\'t implement IReadWrite client interface');
 

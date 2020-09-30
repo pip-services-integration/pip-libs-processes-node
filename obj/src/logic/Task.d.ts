@@ -73,6 +73,6 @@ export declare abstract class Task implements IReferenceable, IParameterized {
     addMapping(collection: string, internalId: string, externalId: string, timeToLive: number, callback: (err: any) => void): void;
     mapToExternal(collection: string, internalId: string, callback: (err: any, externalId: string) => void): void;
     mapToInternal(collection: string, externalId: string, callback: (err: any, internalId: string) => void): void;
-    protected getTypeName<T>(): string;
     private getProcessData;
+    protected checkErrorType(err: any, errorClass: any): boolean;
 }

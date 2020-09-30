@@ -1,0 +1,34 @@
+import { IParameterized } from "pip-services3-commons-node";
+import { Parameters } from "pip-services3-commons-node";
+import { IReferenceable } from "pip-services3-commons-node";
+import { IReferences } from "pip-services3-commons-node";
+import { FilterParams } from "pip-services3-commons-node";
+import { Timing } from "pip-services3-components-node";
+import { IBatchEventsClient } from "./IBatchEventsClient";
+import { IReadWriteClient } from "./IReadWriteClient";
+export declare class BatchEventsHelper<T, K> implements IBatchEventsClient<T>, IReferenceable, IParameterized {
+    private readonly _defaultParameters;
+    private _references;
+    private _logger;
+    private _counters;
+    private _tempBlob;
+    adapter: string;
+    service: string;
+    client: IReadWriteClient<T, K>;
+    pageSize: number;
+    entitiesPerBlob: number;
+    blobTimeToLive?: number;
+    correlationId: string;
+    downloadEventsMessageType: string;
+    uploadEventsMessageType: string;
+    constructor(adapter: string, service: string, client: IReadWriteClient<T, K>, references?: IReferences, parameters?: Parameters);
+    setReferences(references: IReferences): void;
+    setParameters(parameters: Parameters): void;
+    protected instrument(correlationId: string, methodName: string, message?: string): Timing;
+    protected handleError(correlationId: string, methodName: string, error: any): any;
+    private isChangeable;
+    private isIdentifiable;
+    downloadEvents(correlationId: string, filter: FilterParams, fromTime: Date, toTime: Date, responseQueueName: string, requestId?: string, callback?: (err: any) => void): void;
+    uploadEvents(correlationId: string, blobIds: string[], responseQueueName: string, requestId?: string, callback?: (err: any) => void): void;
+    private sendConfirm;
+}

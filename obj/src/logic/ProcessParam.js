@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ProcessParam = void 0;
 class ProcessParam {
 }
 exports.ProcessParam = ProcessParam;
@@ -15,4 +16,5 @@ ProcessParam.CorrelationId = 'correlation_id';
 ProcessParam.Disabled = 'disabled';
 ProcessParam.SimulationInterval = 'simulation_interval';
 ProcessParam.MaxNumberOfAttempts = 'max_number_of_attempts';
+ProcessParam.EntityType = 'entity_type';
 //# sourceMappingURL=ProcessParam.js.map

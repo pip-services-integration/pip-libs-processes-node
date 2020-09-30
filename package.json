@@ -31,7 +31,7 @@
         "watch": "tsc --watch",
         "launch": "node run",
         "relaunch": "tsc && node run",
-        "test": "mocha -t 5000 -R spec -u tdd --recursive ./obj/test",
+        "test": "mocha -t 15000 -R spec -u tdd --recursive ./obj/test",
         "retest": "tsc && mocha -t 5000 -R spec -u tdd --recursive ./obj/test",
         "benchmark": "matcha -R clean -I tdd ./obj/benchmark/run.js",
         "rebenchmark": "tsc && matcha -R clean -I tdd ./obj/benchmark/run.js"
@@ -47,7 +47,7 @@
         "pip-services3-components-node": "^3.0.0",
         "pip-services3-container-node": "^3.0.0",
         "pip-services3-data-node": "^3.0.0",
-        "pip-services3-messaging-node": "^3.0.0",
+        "pip-services3-messaging-node": "^3.0.4",
         "pip-services3-rpc-node": "^3.0.0"
     },
     "devDependencies": {
@@ -58,7 +58,9 @@
         "@types/node": "^14.6.4",
         "chai": "*",
         "mocha": "*",
+        "pip-services-blobs-node": "^1.1.4",
         "pip-services-processstates-node": "git+https://github.com/pip-services-integration/pip-services-processstates-node.git",
+        "pip-services-settings-node": "^1.1.0",
         "restify": "^4.3.0"
     }
 }

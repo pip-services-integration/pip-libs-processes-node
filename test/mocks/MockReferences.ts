@@ -1,6 +1,7 @@
 import { ConfigParams } from "pip-services3-commons-node";
 import { ManagedReferences } from "pip-services3-container-node";
 import { MemoryConfigReader, LogCounters } from "pip-services3-components-node";
+import { MessageQueueFactory } from "pip-services3-messaging-node";
 
 export class MockReferences extends ManagedReferences {
     public constructor(config: ConfigParams, components: any[] = null) {
@@ -11,7 +12,7 @@ export class MockReferences extends ManagedReferences {
         // this._references.put(null, new DiagnosticsLogger(config));
         this._references.put(null, new LogCounters());
         // this._references.put(null, new FixedRateReconfigNotifier());
-        // this._references.put(null, new MemoryMessageQueueFactory());
+        this._references.put(null, new MessageQueueFactory());
 
         // Add other components
         if (components != null) {

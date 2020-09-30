@@ -14,13 +14,6 @@ import { TaskProcessStage } from './TaskProcessStage';
 import { ProcessParam } from './ProcessParam';
 import { IRetriesClientV1 } from 'pip-clients-retries-node';
 
-/*
-process -> Process
-workflowStatus -> ProcessStates
-Activity -> Task
-ActivityStatus -> TaskStateV1
-Recovery -> Recovery
-*/
 export abstract class Task implements IReferenceable, IParameterized {
 
     private _references: IReferences;
@@ -65,7 +58,7 @@ export abstract class Task implements IReferenceable, IParameterized {
         }
 
         if (taskType == null) {
-            callback(new Error('Activity type cannot be null'));
+            callback(new Error('Task type cannot be null'));
             return;
         }
 
@@ -92,7 +85,7 @@ export abstract class Task implements IReferenceable, IParameterized {
         let correlationId = this.getCorrelationId();
 
         this._settingsClient.setSection(correlationId, settingsSection,
-            ConfigParams.fromTuples('LastActivationTimeUtc', new Date(Date.now())), (err, parameters) => {
+            ConfigParams.fromTuples('LastActivationTimeUtc', new Date()), (err, parameters) => {
                 callback(err);
             });
     }
@@ -224,9 +217,9 @@ export abstract class Task implements IReferenceable, IParameterized {
         let message = this.toMessage(this.message);
         let settingsSection = this.getSettingsSection();
 
-        async.series(
+        async.series([
             (callback) => {
-                // Start activity
+                // Start process
                 this._processStatesClient.startProcess(correlationId,
                     this.processType, processKey, this.taskType, this.queue.getName(), message, timeToLive, (err, state) => {
                         if (err) {
@@ -243,7 +236,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 this.processKey = processKey;
                 this.processId = this.processState.id;
 
-                // Set current activity info
+                // Set current task info
                 this.taskState = this.getCurrentTask();
                 this.taskState.queue_name = this.queue.getName();
                 this.taskState.message = message;
@@ -262,6 +255,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.setSection(correlationId, settingsSection,
@@ -273,13 +267,14 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.modifySection(correlationId, settingsSection, null,
                     ConfigParams.fromTuples('StartedProcesss', 1), (err, parameters) => {
                         callback(err);
                     });
-            },
+            }],
             (err) => {
                 if (err) {
                     this._logger.error(correlationId, err, 'Failed to start process %s', this.name);
@@ -322,7 +317,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 this.processKey = processKey;
                 this.processId = this.processState.id;
 
-                // Set current activity info
+                // Set current task info
                 this.taskState = this.getCurrentTask();
                 this.taskState.queue_name = this.queue.getName();
                 this.taskState.message = message;
@@ -341,6 +336,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.setSection(correlationId, settingsSection,
@@ -352,6 +348,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.modifySection(correlationId, settingsSection, null,
@@ -382,7 +379,7 @@ export abstract class Task implements IReferenceable, IParameterized {
             (callback) => {
                 // Call the service and start process
                 this._processStatesClient.activateProcess(correlationId,
-                    processId, this.taskType, this.queue.getName(), message, (err, state) => {
+                    processId ?? this.processId, this.taskType, this.queue.getName(), message, (err, state) => {
                         if (err) {
                             callback(err);
                             return;
@@ -446,7 +443,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Set process info
                 this.processId = this.processState.id;
 
-                // Set current activity info
+                // Set current task info
                 this.taskState = this.getCurrentTask();
                 this.taskState.queue_name = this.queue.getName();
                 this.taskState.message = message;
@@ -789,6 +786,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.modifySection(correlationId, settingsSection,
@@ -833,6 +831,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.modifySection(correlationId, settingsSection,
@@ -879,6 +878,7 @@ export abstract class Task implements IReferenceable, IParameterized {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
 
                 this._settingsClient.modifySection(correlationId, settingsSection,
@@ -903,12 +903,12 @@ export abstract class Task implements IReferenceable, IParameterized {
 
         var processData = this.getProcessData();
 
-        var data = processData.getAsObject(key) as T;
+        var data = processData.get(key);
 
         var correlationId = this.getCorrelationId();
         this._logger.debug(correlationId, 'Get process data for key %s: %s', key, data);
 
-        return data;
+        return data ? JSON.parse(data) as T : undefined;
     }
 
     public setProcessData(key: string, data: any) {
@@ -919,7 +919,7 @@ export abstract class Task implements IReferenceable, IParameterized {
 
         var processData = this.getProcessData();
 
-        processData.setAsObject(key, data);
+        processData.set(key, JSON.stringify(data));
     }
 
     public readSettings(section: string, callback: (err: any, settings: ConfigParams) => void) {
@@ -944,7 +944,7 @@ export abstract class Task implements IReferenceable, IParameterized {
         var settingsSection = this.getSettingsSection(section);
         var correlationId = this.getCorrelationId();
 
-        this._logger.debug(correlationId, 'Write storage settings for key %s: %s', key, value?.ToString());
+        this._logger.debug(correlationId, 'Write storage settings for key %s: %s', key, value?.toString());
 
         this._settingsClient.modifySection(correlationId, settingsSection, ConfigParams.fromTuples(key, value), null, (err, parameters) => {
             callback(err, parameters);
@@ -975,21 +975,23 @@ export abstract class Task implements IReferenceable, IParameterized {
         });
     }
 
-    protected getTypeName<T>(): string {
-        var TCtor: new (...args: any[]) => T;
-        var typeName = typeof (TCtor).name;
-
-        return typeName;
-    }
-
-    private getProcessData(): AnyValueMap {
-        var processData = this.processState.data as AnyValueMap;
+    private getProcessData(): Map<string, string> {
+        var processData = this.processState.data as Map<string, string>;
 
         if (!processData) {
-            this.processState.data = new AnyValueMap();
+            this.processState.data = new Map<string, string>();
             processData = this.processState.data;
         }
 
         return processData;
+    }
+
+    protected checkErrorType(err: any, errorClass: any): boolean {
+        var typedError = new errorClass();
+
+        var typedErrorCode = typedError && typedError.hasOwnProperty('code') ? typedError['code'] : null;
+        var errCode = err && err.hasOwnProperty('code') ? err['code'] : null;
+
+        return typedErrorCode != null && errCode != null && typedErrorCode === errCode;
     }
 }

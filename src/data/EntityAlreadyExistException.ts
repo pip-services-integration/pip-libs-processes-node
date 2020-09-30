@@ -10,6 +10,8 @@ export class EntityAlreadyExistException extends BadRequestException {
 	 */
 	public constructor(correlationId: string = null, entityId: string = null, message: string = null) {
         super(correlationId, 'ENTITY_ALREADY_EXIST', message || 'Entity with id ' + entityId + ' already exist');
-        this.withDetails('entity_id', entityId);
+		this.withDetails('entity_id', entityId);
+		
+		Object.setPrototypeOf(this, EntityAlreadyExistException.prototype);
 	}
 }

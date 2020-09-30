@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.Process = void 0;
 let async = require('async');
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const ProcessParam_1 = require("./ProcessParam");
@@ -22,7 +23,7 @@ class Process {
     }
     setParameters(parameters) {
         var _a;
-        this.parameters = (_a = this.parameters, (_a !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.Parameters())).override(parameters);
+        this.parameters = ((_a = this.parameters) !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.Parameters()).override(parameters);
         this.numberOfListeners = this.parameters.getAsIntegerWithDefault(ProcessParam_1.ProcessParam.NumberOfListeners, this.numberOfListeners);
         this.disabled = this.parameters.getAsBooleanWithDefault(ProcessParam_1.ProcessParam.Disabled, this.disabled);
         this.simulationInterval = this.parameters.getAsIntegerWithDefault(ProcessParam_1.ProcessParam.SimulationInterval, this.simulationInterval);
@@ -41,12 +42,11 @@ class Process {
                 callback(err);
         });
     }
-    addTask(taskType, queue, numberOfListeners = 0, parameters = null) {
+    addTask(taskType, taskClass, queue, numberOfListeners = 0, parameters = null) {
         if (taskType == null)
             throw new Error('Task type cannot be null');
         if (queue == null)
             throw new Error('Message queue cannot be null');
-        let taskClass;
         parameters = this.parameters.override(parameters);
         numberOfListeners = numberOfListeners > 0 ? numberOfListeners : this.numberOfListeners;
         for (var index = 0; index < numberOfListeners; index++) {
@@ -56,7 +56,7 @@ class Process {
     }
     beginListen() {
         if (this._handlers.length == 0)
-            this._logger.warn(this.correlationId, 'Process {0} has no tasks defined', this.processType);
+            this._logger.warn(this.correlationId, 'Process %s has no tasks defined', this.processType);
         this._handlers.forEach((handler) => handler.beginListen());
     }
     addTaskHandler(taskHandler) {

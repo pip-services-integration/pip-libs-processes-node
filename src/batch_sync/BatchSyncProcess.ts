@@ -26,15 +26,15 @@ export class BatchSyncProcess<T> extends Process {
         var uploadAdapter = parameters.getAsObject(BatchSyncParam.UploadAdapter);
 
         // Start process and load entities
-        this.addTask<BatchSyncDownloadTask<T>>(BatchSyncName.DownloadTask, startQueue);
+        this.addTask<BatchSyncDownloadTask<T>>(BatchSyncName.DownloadTask, BatchSyncDownloadTask, startQueue);
 
         // Confirm load and save entities
-        this.addTask<BatchSyncUploadTask<T>>(BatchSyncName.UploadTask, downloadResponseQueue);
+        this.addTask<BatchSyncUploadTask<T>>(BatchSyncName.UploadTask, BatchSyncUploadTask, downloadResponseQueue);
 
         // Confirm save and close process
-        this.addTask<BatchSyncCloseTask<T>>(BatchSyncName.CloseTask, uploadResponseQueue);
+        this.addTask<BatchSyncCloseTask<T>>(BatchSyncName.CloseTask, BatchSyncCloseTask, uploadResponseQueue);
 
         // Recovery load and save
-        this.addTask<BatchSyncRecoveryTask<T>>(BatchSyncName.RecoveryTask, recoveryQueue);
+        this.addTask<BatchSyncRecoveryTask<T>>(BatchSyncName.RecoveryTask, BatchSyncRecoveryTask, recoveryQueue);
     }
 }

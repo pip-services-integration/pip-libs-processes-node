@@ -19,10 +19,10 @@ export class ChangePostProcess<T, K> extends Process {
         var postponeTimeout = parameters.get(ChangesTransferParam.PostponeTimeout);
 
         this.addTask<ChangePostTask<T, K>>(
-            'Post', transferQueue, -1,
+            'Post', ChangePostTask, transferQueue, -1,
             Parameters.fromTuples(
-                ProcessParam.IsInitial, true,
-                ProcessParam.IsFinal, true,
+                ProcessParam.IsInitial, 'true',
+                ProcessParam.IsFinal, 'true',
                 ChangesTransferParam.PostAdapter, postAdapter,
                 ChangesTransferParam.PostponeTimeout, postponeTimeout
             )

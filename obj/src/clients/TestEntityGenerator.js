@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.TestEntityGenerator = void 0;
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const RandomDataGenerator_1 = require("../data/RandomDataGenerator");
 class TestEntityGenerator extends RandomDataGenerator_1.RandomDataGenerator {
@@ -20,7 +21,10 @@ class TestEntityGenerator extends RandomDataGenerator_1.RandomDataGenerator {
             release_date: pip_services3_commons_node_1.RandomDateTime.nextDate(utcNow),
             msrp: pip_services3_commons_node_1.RandomInteger.nextInteger(10, 500),
             color: pip_services3_commons_node_1.RandomArray.pick(["red", "green", "blue", "orange"]),
-            day: pip_services3_commons_node_1.RandomInteger.nextInteger(1, 8)
+            day: pip_services3_commons_node_1.RandomInteger.nextInteger(1, 8),
+            create_time: utcNow,
+            change_time: utcNow,
+            deleted: false
         };
         entity.price = pip_services3_commons_node_1.RandomFloat.updateFloat(entity.msrp);
         return entity;
@@ -40,7 +44,7 @@ class TestEntityGenerator extends RandomDataGenerator_1.RandomDataGenerator {
     }
     delete(item, references) {
         // Logical deletion
-        //item.is_deleted = true;
+        item.deleted = true;
         item.change_time = new Date();
         return item;
     }

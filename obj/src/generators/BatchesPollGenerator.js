@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchesPollGenerator = void 0;
 let async = require('async');
 const ChangesPollGenerator_1 = require("./ChangesPollGenerator");
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
@@ -10,27 +11,41 @@ class BatchesPollGenerator extends ChangesPollGenerator_1.ChangesPollGenerator {
     }
     setParameters(parameters) {
         super.setParameters(parameters);
-        this.BatchesPerRequest = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.BatchesPerRequest, this.BatchesPerRequest);
+        this.BatchesPerRequest = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.BatchesPerRequest, this.BatchesPerRequest);
     }
     execute(callback) {
         var polledEntities = 0;
+        var startSyncTimeUtc;
+        var endSyncTimeUtc;
         async.series([
             (callback) => {
+                this.getStartSyncTimeUtc((err, date) => {
+                    var _a;
+                    var syncDelay = (_a = this.syncDelay) !== null && _a !== void 0 ? _a : 0;
+                    startSyncTimeUtc = date;
+                    endSyncTimeUtc = new Date(Date.now() - syncDelay);
+                    callback(err);
+                });
+            },
+            (callback) => {
                 var _a;
-                var pollAdapter = this.Parameters.getAsObject(ChangesTransferParam_1.ChangesTransferParam.PollAdapter);
-                var filter = (_a = this.Filter, (_a !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.FilterParams()));
-                var maxPages = this.Parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.RequestsPerInterval, -1);
-                this.LastSyncTimeUtc = new Date();
+                var pollAdapter = this.parameters.getAsObject(ChangesTransferParam_1.ChangesTransferParam.PollAdapter);
+                var filter = (_a = this.filter) !== null && _a !== void 0 ? _a : new pip_services3_commons_node_1.FilterParams();
+                filter.setAsObject('FromDateTime', startSyncTimeUtc);
+                filter.setAsObject('ToDateTime', endSyncTimeUtc);
+                var maxPages = this.parameters.getAsIntegerWithDefault(ChangesTransferParam_1.ChangesTransferParam.RequestsPerInterval, -1);
+                //this.LastSyncTimeUtc = new Date();
+                var skip = 0;
                 let cancel = false;
                 async.whilst(() => !cancel, (callback) => {
                     let page;
                     async.series([
                         // Read changes from source
                         (callback) => {
-                            pollAdapter.getBatches(this.CorrelationId, filter, new pip_services3_commons_node_1.PagingParams(0, this.BatchesPerRequest, false), (err, data) => {
+                            pollAdapter.getBatches(this.correlationId, filter, new pip_services3_commons_node_1.PagingParams(skip, this.BatchesPerRequest, false), (err, data) => {
                                 page = data;
                                 let typename = pollAdapter.constructor.name;
-                                this.Logger.debug(this.CorrelationId, '%s retrieved %s batches changes from %s', this.Name, page.data.length, typename);
+                                this.logger.debug(this.correlationId, '%s retrieved %s batches changes from %s', this.name, page.data.length, typename);
                                 callback(err);
                             });
                         },
@@ -41,14 +56,14 @@ class BatchesPollGenerator extends ChangesPollGenerator_1.ChangesPollGenerator {
                                     // Send entities one-by-one to all destination queues
                                     (callback) => {
                                         var _a;
-                                        var entities = (_a = batch.entities, (_a !== null && _a !== void 0 ? _a : []));
+                                        var entities = (_a = batch.entities) !== null && _a !== void 0 ? _a : [];
                                         async.each(entities, (entity, callback) => {
-                                            this._tempBlobClient.writeBlobConditional(this.CorrelationId, entity, null, (err, envelop) => {
+                                            this._tempBlobClient.writeBlobConditional(this.correlationId, entity, null, (err, envelop) => {
                                                 if (err) {
                                                     callback(err);
                                                     return;
                                                 }
-                                                this.Queue.sendAsObject(this.CorrelationId, null, envelop, (err) => {
+                                                this.queue.sendAsObject(this.correlationId, null, envelop, (err) => {
                                                     callback(err);
                                                 });
                                             });
@@ -59,7 +74,7 @@ class BatchesPollGenerator extends ChangesPollGenerator_1.ChangesPollGenerator {
                                     },
                                     // If everything is ok, them ack the batch
                                     (callback) => {
-                                        pollAdapter.ackBatchById(this.CorrelationId, batch.batch_id, callback);
+                                        pollAdapter.ackBatchById(this.correlationId, batch.batch_id, callback);
                                     },
                                 ], (err) => {
                                     callback(err);
@@ -74,9 +89,9 @@ class BatchesPollGenerator extends ChangesPollGenerator_1.ChangesPollGenerator {
                             maxPages--;
                             if (size == 0 || maxPages == 0) {
                                 cancel = true;
-                                callback();
-                                return;
                             }
+                            skip += this.entitiesPerRequest;
+                            callback();
                         },
                     ], (err) => {
                         callback(err);
@@ -86,16 +101,18 @@ class BatchesPollGenerator extends ChangesPollGenerator_1.ChangesPollGenerator {
                 });
             },
             (callback) => {
+                // Update the last sync time
+                this.lastSyncTimeUtc = endSyncTimeUtc;
                 if (polledEntities > 0) {
-                    this.Logger.info(this.CorrelationId, '{0} retrieved and sent {1} changes', this.Name, polledEntities);
+                    this.logger.info(this.correlationId, '%s retrieved and sent %s changes', this.name, polledEntities);
                 }
                 else {
-                    this.Logger.info(this.CorrelationId, '{0} found no changes', this.Name, polledEntities);
+                    this.logger.info(this.correlationId, '%s found no changes', this.name, polledEntities);
                 }
-                if (this.StatusSection != null) {
-                    let updateParams = pip_services3_commons_node_1.ConfigParams.fromTuples('LastSyncTimeUtc', this.LastSyncTimeUtc);
+                if (this.statusSection != null) {
+                    let updateParams = pip_services3_commons_node_1.ConfigParams.fromTuples('LastSyncTimeUtc', this.lastSyncTimeUtc);
                     let incrementParams = polledEntities > 0 ? pip_services3_commons_node_1.ConfigParams.fromTuples('PolledEntities', polledEntities) : null;
-                    this._settingsClient.modifySection(this.CorrelationId, this.StatusSection, updateParams, incrementParams, (err, parameters) => {
+                    this._settingsClient.modifySection(this.correlationId, this.statusSection, updateParams, incrementParams, (err, parameters) => {
                         callback(err);
                     });
                 }

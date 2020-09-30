@@ -1,9 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ForwardMessageTask = void 0;
 let async = require('async');
 const Task_1 = require("./Task");
 const ProcessParam_1 = require("./ProcessParam");
 class ForwardMessageTask extends Task_1.Task {
+    constructor() {
+        super();
+    }
     execute(callback) {
         var initial = this._parameters.getAsBooleanWithDefault(ProcessParam_1.ProcessParam.IsInitial, true);
         var final = this._parameters.getAsBooleanWithDefault(ProcessParam_1.ProcessParam.IsFinal, true);

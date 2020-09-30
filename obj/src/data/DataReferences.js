@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DataReferences = void 0;
 class DataReferences {
     constructor() {
         this._data = {};

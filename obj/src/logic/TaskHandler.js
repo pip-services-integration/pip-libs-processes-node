@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.TaskHandler = void 0;
 let async = require('async');
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const pip_services3_commons_node_2 = require("pip-services3-commons-node");
@@ -8,14 +9,8 @@ const pip_services3_components_node_2 = require("pip-services3-components-node")
 const pip_clients_eventlog_node_1 = require("pip-clients-eventlog-node");
 const pip_clients_eventlog_node_2 = require("pip-clients-eventlog-node");
 const ProcessParam_1 = require("./ProcessParam");
+const pip_clients_processstates_node_1 = require("pip-clients-processstates-node");
 const TaskProcessStage_1 = require("./TaskProcessStage");
-// public class TaskHandler<T>: TaskHandler
-// {
-//     public TaskHandler(string processType, string taskType, IMessageQueue queue,
-//         IReferences references, Parameters parameters)
-//         : base(processType, taskType, typeof(T), queue, references, parameters)
-//     { }
-// }
 class TaskHandler {
     constructor(processType, taskType, taskClass, queue, references, parameters) {
         this.maxNumberOfAttempts = 5;
@@ -96,7 +91,7 @@ class TaskHandler {
         });
     }
     createTask(message, queue, callback) {
-        var task = this.taskClass();
+        var task = (new this.taskClass());
         task.initialize(this.processType, this.taskType, message, queue, this.references, this.parameters, (err) => {
             callback(err, task);
         });
@@ -134,10 +129,10 @@ class TaskHandler {
                     }
                     if (this._eventLogClient != null) {
                         // Log warning
-                        this._eventLogClient.logEvent((_a = message.correlation_id, (_a !== null && _a !== void 0 ? _a : this.correlationId)), {
+                        this._eventLogClient.logEvent((_a = message.correlation_id) !== null && _a !== void 0 ? _a : this.correlationId, {
                             source: this.processType,
                             type: pip_clients_eventlog_node_2.EventLogTypeV1.Failure,
-                            correlation_id: (_b = message.correlation_id, (_b !== null && _b !== void 0 ? _b : this.correlationId)),
+                            correlation_id: (_b = message.correlation_id) !== null && _b !== void 0 ? _b : this.correlationId,
                             time: new Date(),
                             severity: pip_clients_eventlog_node_1.EventLogSeverityV1.Informational,
                             message: 'After ' + this.maxNumberOfAttempts + ' attempts moved poison message ' + message + ' to dead queue'
@@ -172,22 +167,23 @@ class TaskHandler {
                 var _a;
                 timing = this._counters.beginTiming(this.name + '.exec_time');
                 this._counters.incrementOne(this.name + '.call_count');
-                this._logger.debug((_a = message.correlation_id, (_a !== null && _a !== void 0 ? _a : this.correlationId)), 'Started task %s with %s', this.name, message);
+                this._logger.debug((_a = message.correlation_id) !== null && _a !== void 0 ? _a : this.correlationId, 'Started task %s with %s', this.name, message);
                 // Execute the task
                 task.execute((err) => {
                     var _a;
                     if (!err) {
-                        this._logger.debug((_a = message.correlation_id, (_a !== null && _a !== void 0 ? _a : this.correlationId)), 'Completed task %s', this.name);
+                        this._logger.debug((_a = message.correlation_id) !== null && _a !== void 0 ? _a : this.correlationId, 'Completed task %s', this.name);
                     }
                     callback(err);
                 });
             }
         ], (ex) => {
-            let processLockedException = ex;
+            //let processLockedException = ex instanceof ProcessLockedExceptionV1;
+            var processLockedException = this.checkErrorType(ex, pip_clients_processstates_node_1.ProcessLockedExceptionV1);
             async.series([
                 (callback) => {
                     var _a;
-                    if (processLockedException) {
+                    if (processLockedException || !ex) {
                         // Do nothing. Wait and retry
                         callback();
                         return;
@@ -197,27 +193,27 @@ class TaskHandler {
                         // If process was started but not completed, use recovery
                         if (task.processStage == TaskProcessStage_1.TaskProcessStage.Processing && task.processState != null) {
                             // For exceeded number of attempts
-                            if ((_a = task.processState.recovery_attempts, (_a !== null && _a !== void 0 ? _a : 0)) >= this.maxNumberOfAttempts)
+                            if (((_a = task.processState.recovery_attempts) !== null && _a !== void 0 ? _a : 0) >= this.maxNumberOfAttempts)
                                 task.failProcess(ex.message, (err) => {
-                                    if (!err) {
+                                    if (err) {
                                         this.handlePoisonMessages(message, queue, ex.message, callback);
                                         return;
                                     }
                                     callback();
-                                    return;
                                 });
                             // For starting processs without key fail and retry
                             else
                                 task.failAndRecoverProcess(ex.message, this.queue.getName(), message, null, (err) => {
-                                    if (!err) {
+                                    if (err) {
                                         this.handlePoisonMessages(message, queue, ex.message, callback);
                                         return;
                                     }
                                     callback();
-                                    return;
                                 });
                         }
-                        callback();
+                        else {
+                            callback();
+                        }
                     }
                     // Otherwise treat it as a poison message
                     else {
@@ -226,8 +222,10 @@ class TaskHandler {
                 }
             ], (err) => {
                 var _a;
-                this._counters.incrementOne(name + '.attempt_count');
-                this._logger.error((_a = message.correlation_id, (_a !== null && _a !== void 0 ? _a : this.correlationId)), ex, 'Execution of task {0} failed', name);
+                if (ex) {
+                    this._counters.incrementOne(this.name + '.attempt_count');
+                    this._logger.error((_a = message.correlation_id) !== null && _a !== void 0 ? _a : this.correlationId, ex, 'Execution of task %s failed', this.name);
+                }
                 timing.endTiming();
                 callback(err);
             });
@@ -240,6 +238,12 @@ class TaskHandler {
             if (callback)
                 callback(err);
         });
+    }
+    checkErrorType(err, errorClass) {
+        var typedError = new errorClass();
+        var typedErrorCode = typedError && typedError.hasOwnProperty('code') ? typedError['code'] : null;
+        var errCode = err && err.hasOwnProperty('code') ? err['code'] : null;
+        return typedErrorCode != null && errCode != null && typedErrorCode === errCode;
     }
 }
 exports.TaskHandler = TaskHandler;

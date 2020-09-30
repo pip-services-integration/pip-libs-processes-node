@@ -2,30 +2,31 @@ let async = require('async');
 
 import { IReferenceable, IParameterized, IClosable, IReferences, Parameters } from 'pip-services3-commons-node';
 import { GeneratorParam } from './GeneratorParam';
-import { IMessageQueue } from 'pip-services3-messaging-node';
+import { IMessageQueue, MessageEnvelope } from 'pip-services3-messaging-node';
 import { ILogger, ICounters, CompositeLogger, CompositeCounters } from 'pip-services3-components-node';
+import { setImmediate } from 'timers';
 
 export abstract class MessageGenerator implements IReferenceable, IParameterized, IClosable {
     protected static readonly _defaultParameters: Parameters = Parameters.fromTuples(
         GeneratorParam.Interval, 5 * 60 * 1000
     );
 
-    private _started: boolean = false;
-    private _cancel: boolean = false;
+    protected _started: boolean = false;
+    protected _cancel: boolean = false;
 
-    public References: IReferences;
-    public Logger: ILogger;
-    public Counters: ICounters;
+    public references: IReferences;
+    public logger: ILogger;
+    public counters: ICounters;
 
-    public Component: string;
-    public Name: string;
-    public Queue: IMessageQueue;
+    public component: string;
+    public name: string;
+    public queue: IMessageQueue;
 
-    public Parameters: Parameters;
-    public Interval: number;
-    public Disabled: boolean;
-    public MessageType: string;
-    public CorrelationId: string;
+    public parameters: Parameters;
+    public interval: number;
+    public disabled: boolean;
+    public messageType: string;
+    public correlationId: string;
 
     public constructor(component: string, name: string, queue: IMessageQueue, references: IReferences, parameters: Parameters = null) {
         if (component == null)
@@ -35,28 +36,48 @@ export abstract class MessageGenerator implements IReferenceable, IParameterized
         if (references == null)
             throw new Error('References cannot be null');
 
-        this.Component = component;
-        this.Name = name ?? typeof this;
-        this.Queue = queue;
+        this.component = component;
+        this.name = name ?? typeof this;
+        this.queue = queue;
 
         this.setParameters(MessageGenerator._defaultParameters.override(parameters));
         if (references != null) this.setReferences(references);
     }
 
     setReferences(references: IReferences): void {
-        this.References = references;
+        this.references = references;
 
-        this.Logger = new CompositeLogger(references);
-        this.Counters = new CompositeCounters();
+        this.logger = new CompositeLogger(references);
+        this.counters = new CompositeCounters();
     }
 
     setParameters(parameters: Parameters): void {
-        this.Parameters = (this.Parameters ?? new Parameters()).override(parameters);
+        this.parameters = (this.parameters ?? new Parameters()).override(parameters);
 
-        this.Interval = this.Parameters.getAsIntegerWithDefault(GeneratorParam.Interval, this.Interval);
-        this.MessageType = this.Parameters.getAsStringWithDefault(GeneratorParam.MessageType, this.MessageType);
-        this.Disabled = this.Parameters.getAsBooleanWithDefault(GeneratorParam.Disabled, this.Disabled);
-        this.CorrelationId = this.Parameters.getAsStringWithDefault(GeneratorParam.CorrelationId, this.CorrelationId);
+        this.interval = this.parameters.getAsIntegerWithDefault(GeneratorParam.Interval, this.interval);
+        this.messageType = this.parameters.getAsStringWithDefault(GeneratorParam.MessageType, this.messageType);
+        this.disabled = this.parameters.getAsBooleanWithDefault(GeneratorParam.Disabled, this.disabled);
+        this.correlationId = this.parameters.getAsStringWithDefault(GeneratorParam.CorrelationId, this.correlationId);
+    }
+
+    public sendMessageAsObject(correlationId: string, messageType: string, message: any, callback?: (err: any) => void) {
+        var envelope = new MessageEnvelope(correlationId ?? this.correlationId, messageType, message);
+        this.sendMessage(envelope, callback);
+    }
+
+    public sendMessage(envelop: MessageEnvelope, callback?: (err: any) => void) {
+        // Redefine message type based on the configuration
+        envelop.message_type = envelop.message_type ?? this.messageType;
+
+        this.queue.send(this.correlationId, envelop, (err) => {
+            if (err) {
+                if (callback) callback(err);
+                return;
+            }
+
+            this.logger.trace(this.correlationId, "%s.%s sent message to %s", this.component, this.name, this.queue);
+            if (callback) callback(null);
+        });
     }
 
     public abstract execute(callback: (err: any) => void): void;
@@ -65,39 +86,43 @@ export abstract class MessageGenerator implements IReferenceable, IParameterized
         // If already started then exit
         if (this._started) return;
 
+        this._started = true;
+
         async.whilst(
             () => !this._cancel,
             (callback) => {
-                let disabled = this.Disabled;
+                let disabled = this.disabled;
                 async.series([
                     (callback) => {
-                        if (!disabled) {
-                            var timing = this.Counters.beginTiming(this.Component + '.' + this.Name + '.exec_time');
-
-                            async.series([
-                                (callback) => {
-                                    this.Counters.incrementOne(this.Component + '.' + this.Name + '.exec_count');
-                                    this.Logger.trace(this.CorrelationId, 'Started execution of ' + this.Name);
-
-                                    this.execute((err) => {
-                                        if (!err) {
-                                            this.Logger.trace(this.CorrelationId, 'Execution of ' + this.Name + ' completed');
-                                        }
-
-                                        callback(err);
-                                    });
-                                }
-                            ], (err) => {
-                                if (!err) {
-                                    this.Counters.incrementOne(this.Component + '.' + this.Name + '.fail_count');
-                                    this.Logger.error(this.CorrelationId, err, 'Execution of ' + this.Name + ' failed');
-                                }
-
-                                timing.endTiming();
-
-                                callback(err);
-                            });
+                        if (disabled) {
+                            callback();
+                            return;
                         }
+                        var timing = this.counters.beginTiming(this.component + '.' + this.name + '.exec_time');
+
+                        async.series([
+                            (callback) => {
+                                this.counters.incrementOne(this.component + '.' + this.name + '.exec_count');
+                                this.logger.trace(this.correlationId, 'Started execution of ' + this.name);
+
+                                this.execute((err) => {
+                                    if (!err) {
+                                        this.logger.trace(this.correlationId, 'Execution of ' + this.name + ' completed');
+                                    }
+
+                                    callback(err);
+                                });
+                            }
+                        ], (err) => {
+                            if (err) {
+                                this.counters.incrementOne(this.component + '.' + this.name + '.fail_count');
+                                this.logger.error(this.correlationId, err, 'Execution of ' + this.name + ' failed');
+                            }
+
+                            timing.endTiming();
+
+                            callback(err);
+                        });
                     },
                     (callback) => {
                         if (disabled) {
@@ -107,12 +132,14 @@ export abstract class MessageGenerator implements IReferenceable, IParameterized
 
                         callback();
                     }], (err) => {
-                        callback(err);
+                        if (!err) setImmediate(callback);
+                        else callback(err);
+                        // callback(err);
                     }
                 )
             },
             (err) => {
-                this._started = true;
+                this._started = false;
                 if (callback) callback(err);
             }
         );
@@ -123,14 +150,14 @@ export abstract class MessageGenerator implements IReferenceable, IParameterized
         this._cancel = true;
 
         // Close output queue
-        this.Queue.close(correlationId, callback);
+        this.queue.close(correlationId, callback);
     }
 
     private delayExecute(callback?: (err: any) => void) {
-        if (this.Interval == Number.MAX_SAFE_INTEGER)   // Infinite
+        if (this.interval == Number.MAX_SAFE_INTEGER)   // Infinite
         {
             async.whilst(
-                () => this.Interval == Number.MAX_SAFE_INTEGER || !this._cancel,
+                () => this.interval == Number.MAX_SAFE_INTEGER || !this._cancel,
                 (callback) => {
                     setTimeout(() => {
                         callback();
@@ -142,7 +169,7 @@ export abstract class MessageGenerator implements IReferenceable, IParameterized
             );
         }
         else {
-            let interval = this.Interval;
+            let interval = this.interval;
             let timeout = 10 * 1000; // 10 sec
 
             async.whilst(

@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityAlreadyExistException = void 0;
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 class EntityAlreadyExistException extends pip_services3_commons_node_1.BadRequestException {
     /**
@@ -12,6 +13,7 @@ class EntityAlreadyExistException extends pip_services3_commons_node_1.BadReques
     constructor(correlationId = null, entityId = null, message = null) {
         super(correlationId, 'ENTITY_ALREADY_EXIST', message || 'Entity with id ' + entityId + ' already exist');
         this.withDetails('entity_id', entityId);
+        Object.setPrototypeOf(this, EntityAlreadyExistException.prototype);
     }
 }
 exports.EntityAlreadyExistException = EntityAlreadyExistException;

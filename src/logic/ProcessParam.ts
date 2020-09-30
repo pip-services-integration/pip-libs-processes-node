@@ -11,4 +11,5 @@ export class ProcessParam {
     public static readonly Disabled: string = 'disabled';
     public static readonly SimulationInterval: string = 'simulation_interval';
     public static readonly MaxNumberOfAttempts: string = 'max_number_of_attempts';
+    public static readonly EntityType: string = 'entity_type';
 }

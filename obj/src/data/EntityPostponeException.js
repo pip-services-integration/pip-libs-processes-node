@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityPostponeException = void 0;
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 class EntityPostponeException extends pip_services3_commons_node_1.InvalidStateException {
     /**
@@ -12,6 +13,7 @@ class EntityPostponeException extends pip_services3_commons_node_1.InvalidStateE
     constructor(correlationId = null, entityId = null, message = null) {
         super(correlationId, 'ENTITY_POSTPONE', message || 'Processing of entity with id ' + entityId + ' shall be postponed');
         this.withDetails('entity_id', entityId);
+        Object.setPrototypeOf(this, EntityPostponeException.prototype);
     }
 }
 exports.EntityPostponeException = EntityPostponeException;

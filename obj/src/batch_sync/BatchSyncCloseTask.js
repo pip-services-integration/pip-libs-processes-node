@@ -1,16 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchSyncCloseTask = void 0;
 let async = require('async');
 const Task_1 = require("../logic/Task");
 const ProcessParam_1 = require("../logic/ProcessParam");
 const pip_services3_messaging_node_1 = require("pip-services3-messaging-node");
+const pip_clients_processstates_node_1 = require("pip-clients-processstates-node");
 const BatchSyncMessage_1 = require("./BatchSyncMessage");
-const BatchMultiSyncParam_1 = require("./BatchMultiSyncParam");
 const BatchSyncParam_1 = require("./BatchSyncParam");
 class BatchSyncCloseTask extends Task_1.Task {
     execute(callback) {
         // Get required parameters
         var recoveryQueue = this._parameters.get(ProcessParam_1.ProcessParam.RecoveryQueue);
+        var entityType = this._parameters.getAsNullableString(ProcessParam_1.ProcessParam.EntityType);
         async.series([
             (callback) => {
                 // Activate the process
@@ -21,65 +23,41 @@ class BatchSyncCloseTask extends Task_1.Task {
             (callback) => {
                 var response = this.message.getMessageAsJson();
                 if (response != null && !response.successful) {
-                    // For unsuccessful reponse request immediate compensation
-                    let errorMessage = 'Failed to upload all ' + this.getTypeName();
+                    // For unsuccessful reponse request immediate recovery
+                    let errorMessage = 'Failed to upload all ' + entityType;
                     let message = new pip_services3_messaging_node_1.MessageEnvelope(this.processId, BatchSyncMessage_1.BatchSyncMessage.RecoveryUpload, response.blob_ids);
                     this.failAndRecoverProcess(errorMessage, recoveryQueue.getName(), message, null, callback);
                 }
                 else {
-                    var targetAdapterCount = this._parameters.getAsInteger(BatchMultiSyncParam_1.BatchMultiSyncParam.UploadAdapterCount);
-                    var index = this._parameters.getAsInteger(BatchMultiSyncParam_1.BatchMultiSyncParam.UploadAdapterIndex);
-                    // flag this branch as complete
-                    this.setProcessData(BatchMultiSyncParam_1.BatchMultiSyncParam.UploadProcessingComplete + index, true);
-                    index++;
-                    if (index < targetAdapterCount) {
-                        var nextUploadNotifyQueue = this._parameters.getAsObject(BatchMultiSyncParam_1.BatchMultiSyncParam.UploadNotifyQueue + index.toString());
-                        var dldRespMsg = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.DownloadResponseMessage);
-                        async.series([
-                            (callback) => {
-                                nextUploadNotifyQueue.send(this.processId, dldRespMsg, callback);
-                            },
-                            (callback) => {
-                                this.continueProcess(callback);
-                            },
-                        ], (err) => {
-                            this._logger.info(this.processId, 'Completed upload step ' + index);
-                            callback(err);
-                        });
-                    }
-                    else {
-                        // For successful upload save sync time and complete transaction
-                        //var settings = await SettingsClient.ReadAsync(CorrelationId, StatusSection);
-                        //var stopTime = settings.GetAsDateTime(BatchSyncParam.StopSyncTimeUtc);
-                        var stopTime = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.StopSyncTimeUtc);
-                        async.series([
-                            (callback) => {
-                                this.writeSettingsKey(this.statusSection, BatchSyncParam_1.BatchSyncParam.LastSyncTimeUtc, stopTime, callback);
-                            },
-                            (callback) => {
-                                // Complete process successfully
-                                this.completeProcess(callback);
-                            },
-                            (callback) => {
-                                // Clean up blobs
-                                this._tempBlobClient.deleteBlobsByIds(this.processId, response.blob_ids, callback);
-                            },
-                        ], (err) => {
-                            this._logger.info(this.processId, 'Completed full synchronization');
-                            callback(err);
-                        });
-                    }
+                    // For successful upload save sync time and complete transaction
+                    var stopTime = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.StopSyncTimeUtc);
+                    async.series([
+                        (callback) => {
+                            this.writeSettingsKey(this.statusSection, BatchSyncParam_1.BatchSyncParam.LastSyncTimeUtc, stopTime, callback);
+                        },
+                        (callback) => {
+                            // Complete process successfully
+                            this.completeProcess(callback);
+                        },
+                        (callback) => {
+                            // Clean up blobs
+                            this._tempBlobClient.deleteBlobsByIds(this.processId, response.blob_ids, callback);
+                        },
+                    ], (err) => {
+                        this._logger.info(this.processId, 'Completed full synchronization');
+                        callback(err);
+                    });
                 }
             }
         ], (err) => {
-            let processNotFoundException = err;
-            if (processNotFoundException) {
+            //if (err instanceof ProcessNotFoundExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessNotFoundExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for unknown process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
             }
-            let processStoppedException = err;
-            if (processStoppedException) {
+            //if (err instanceof ProcessStoppedExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessStoppedExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for inactive process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;

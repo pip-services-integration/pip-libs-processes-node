@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.TestMessageType = void 0;
 class TestMessageType {
 }
 exports.TestMessageType = TestMessageType;

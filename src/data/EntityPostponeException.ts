@@ -10,6 +10,8 @@ export class EntityPostponeException extends InvalidStateException {
 	 */
 	public constructor(correlationId: string = null, entityId: string = null, message: string = null) {
         super(correlationId, 'ENTITY_POSTPONE', message || 'Processing of entity with id ' + entityId + ' shall be postponed');
-        this.withDetails('entity_id', entityId);
+		this.withDetails('entity_id', entityId);
+		
+		Object.setPrototypeOf(this, EntityPostponeException.prototype);
 	}
 }

@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ClientParam = void 0;
 class ClientParam {
 }
 exports.ClientParam = ClientParam;

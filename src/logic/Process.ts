@@ -8,6 +8,7 @@ import { ITaskHandler } from './ITaskHandler';
 import { CompositeLogger } from 'pip-services3-components-node';
 import { TaskHandler } from './TaskHandler';
 import { IMessageQueue } from 'pip-services3-messaging-node';
+import { Task } from './Task';
 
 export class Process implements IReferenceable, IParameterized, IClosable {
     protected static readonly _defaultParameters: Parameters = Parameters.fromTuples(
@@ -69,14 +70,12 @@ export class Process implements IReferenceable, IParameterized, IClosable {
         })
     }
 
-    public addTask<T>(taskType: string, queue: IMessageQueue,
+    public addTask<T extends Task>(taskType: string, taskClass: (new () => T), queue: IMessageQueue,
         numberOfListeners: number = 0, parameters: Parameters = null): Process {
         if (taskType == null)
             throw new Error('Task type cannot be null');
         if (queue == null)
             throw new Error('Message queue cannot be null');
-
-        let taskClass: new (...args: any[]) => T;
 
         parameters = this.parameters.override(parameters);
         numberOfListeners = numberOfListeners > 0 ? numberOfListeners : this.numberOfListeners;
@@ -89,7 +88,7 @@ export class Process implements IReferenceable, IParameterized, IClosable {
 
     public beginListen(): void {
         if (this._handlers.length == 0)
-            this._logger.warn(this.correlationId, 'Process {0} has no tasks defined', this.processType);
+            this._logger.warn(this.correlationId, 'Process %s has no tasks defined', this.processType);
 
         this._handlers.forEach((handler) => handler.beginListen());
     }

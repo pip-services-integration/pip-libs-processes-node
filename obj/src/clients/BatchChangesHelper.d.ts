@@ -29,5 +29,7 @@ export declare class BatchChangesHelper<T, K> implements IBatchChangesClient<T>,
     private isChangeable;
     private isIdentifiable;
     downloadChanges(correlationId: string, filter: FilterParams, fromTime: Date, toTime: Date, responseQueueName: string, requestId: string, callback: (err: any) => void): void;
+    private writeChunkToBlob;
     uploadChanges(correlationId: string, blobIds: string[], responseQueueName: string, requestId: string, callback: (err: any) => void): void;
+    private sendConfirm;
 }

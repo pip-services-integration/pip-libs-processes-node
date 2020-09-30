@@ -19,19 +19,23 @@ export class ChangePostTask<T, K> extends Task {
 
     protected makeRetryKey(entity: any): string {
         // We do not support non-identifiable entities
-        var te = entity as IChangeable;
-        var ie = entity as IIdentifiable<K>;
-        if (te == null || ie == null) return null;
+        if (!this.isChangeable(entity) || !this.isIdentifiable(entity)) return null;
 
-        return ie.id.toString() + '-' + StringConverter.toString(te.change_time);
+        return entity.id.toString() + '-' + StringConverter.toString(entity.change_time);
     }
 
     protected checkRetry(entity: any, callback: (err: any, result: boolean) => void) {
         var retriesGroup = this._parameters.getAsNullableString(ChangesTransferParam.RetriesGroup);
-        if (retriesGroup == null) return false;
+        if (retriesGroup == null) {
+            callback(null, false);
+            return;
+        }
 
         var entityKey = this.makeRetryKey(entity);
-        if (entityKey == null) return false;
+        if (entityKey == null) {
+            callback(null, false);
+            return;
+        }
 
         this._retriesClient.getRetryById(this.correlationId, retriesGroup, entityKey, (err, retry) => {
             callback(err, retry != null);
@@ -40,10 +44,16 @@ export class ChangePostTask<T, K> extends Task {
 
     protected writeRetry(entity: any, callback: (err: any) => void) {
         var retriesGroup = this._parameters.getAsNullableString(ChangesTransferParam.RetriesGroup);
-        if (retriesGroup == null) return;
+        if (retriesGroup == null) {
+            callback(null);
+            return;
+        }
 
         var entityKey = this.makeRetryKey(entity);
-        if (entityKey == null) return;
+        if (entityKey == null) {
+            callback(null);
+            return;
+        }
 
         this._retriesClient.addRetry(this.correlationId, retriesGroup, entityKey, null, (err, retry) => {
             callback(err);
@@ -71,6 +81,7 @@ export class ChangePostTask<T, K> extends Task {
                         // Or data can be sent directly
                         else {
                             entity = message.getMessageAsJson() as T;
+                            callback();
                         }
                     }
                 ], (err) => {
@@ -99,9 +110,8 @@ export class ChangePostTask<T, K> extends Task {
     }
 
     protected getId(prefix: string, entity: any): string {
-        let ie = entity as IIdentifiable<K>;
-        if (ie != null) {
-            var id = ie.id.toString();
+        if (this.isIdentifiable(entity)) {
+            var id = entity.id.toString();
             return prefix + id;
         }
 
@@ -136,14 +146,11 @@ export class ChangePostTask<T, K> extends Task {
         var sendToUpdateAsyncOnly = this._parameters.getAsBoolean(ChangesTransferParam.SendToUpdateAsyncOnly);
 
         // For trackable entities call specific method
-        var te = entity as IChangeable;
-
-        if (te != null) {
-            if (te.deleted && !sendToUpdateAsyncOnly) {
+        if (this.isChangeable(entity)) {
+            if (entity.deleted && !sendToUpdateAsyncOnly) {
                 // Deletion is only supported for identifiable entities
-                let ie = entity as IIdentifiable<K>;
-                if (ie != null) {
-                    postAdapter.deleteById(this.processId, ie.id, (err, entity) => {
+                if (this.isIdentifiable<K>(entity)) {
+                    postAdapter.deleteById(this.processId, entity.id, (err, entity) => {
                         this._logger.info(this.processId, 'Deleted %s by %s', entity, this.name);
                         callback(err);
                     });
@@ -152,21 +159,20 @@ export class ChangePostTask<T, K> extends Task {
                     this._logger.warn(this.processId, 'Deleted %s is not trackable to be deleted. Processing skipped');
                 }
             }
-            else if (te.create_time == te.change_time && !sendToUpdateAsyncOnly) {
+            else if (entity.create_time == entity.change_time && !sendToUpdateAsyncOnly) {
                 async.series([
                     (callback) => {
                         // Try to create first
-                        postAdapter.create(this.processId, entity, (err, entity) => {
+                        postAdapter.create(this.processId, entity as any as T, (err, entity) => {
                             this._logger.info(this.processId, 'Created %s by %s', entity, this.name);
                             callback(err);
                         });
                     }
                 ], (err) => {
                     // Update on error
-                    let entityAlreadyExistException = err as EntityAlreadyExistException;
-                    if (entityAlreadyExistException != null) {
+                    if (err instanceof EntityAlreadyExistException) {
                         this._logger.warn(this.processId, 'Found existing entity %s. Trying to update.', entity, this.processType, this.taskType);
-                        postAdapter.update(this.processId, entity, (err, entity) => {
+                        postAdapter.update(this.processId, entity as any as T, (err, entity) => {
                             this._logger.info(this.processId, 'Updated %s by %s', entity, this.name);
                             callback(err);
                         });
@@ -180,15 +186,14 @@ export class ChangePostTask<T, K> extends Task {
                 async.series([
                     (callback) => {
                         // Try to update
-                        postAdapter.update(this.processId, entity, (err, entity) => {
+                        postAdapter.update(this.processId, entity as any as T, (err, entity) => {
                             this._logger.info(this.processId, 'Updated %s by %s', entity, this.name);
                             callback(err);
                         });
                     }
                 ], (err) => {
                     // Skip if entity wasn't found
-                    let entityNotFoundException = err as EntityNotFoundException;
-                    if (entityNotFoundException != null) {
+                    if (err instanceof EntityNotFoundException) {
                         this._logger.warn(this.processId, 'Not found updated %s. Processing skipped.', entity);
                     }
                     callback(err);
@@ -243,10 +248,10 @@ export class ChangePostTask<T, K> extends Task {
                 return;
             }
 
-            this.checkRetry(entity, (err, isDuplicates) => {
+            this.checkRetry(entity, (err, isRetries) => {
                 // If retries are configured and this is a retry then exit
                 // SS: Added initial check
-                if (initial && isDuplicates) {
+                if (initial && isRetries) {
                     async.series([
                         (callback) => {
                             // Write retry to control number of attempts
@@ -273,50 +278,58 @@ export class ChangePostTask<T, K> extends Task {
                                     this.postEntity(entity, this.queue, callback);
                                 },
                             ], (err) => {
-                                this.postEntityErrorHandler(err, callback);
+                                this.postEntityErrorHandler(err, (err1, terminate) => {
+                                    if (terminate) {
+                                        callback(err1);
+                                        return;
+                                    }
+
+                                    async.series([
+                                        (callback) => {
+                                            this.endTask(callback);
+                                        },
+                                        (callback) => {
+                                            let isFinal = this.isFinal();
+                                            if (isFinal) {
+                                                // Delete linked blob only at final task
+                                                this.deleteEntityBlob(this.message, callback);
+                                            }
+                                            else {
+                                                // Pass message to another queue
+                                                // SS: Added forwarding message for seq transfer process
+                                                var transferQueue = this._parameters.getAsObject(ChangesTransferParam.TransferQueue) as IMessageQueue;
+                                                if (transferQueue != null) {
+                                                    transferQueue.send(this.correlationId, this.message, callback);
+                                                }
+                                                else {
+                                                    callback();
+                                                }
+                                            }
+                                        },
+                                        (callback) => {
+                                            // SS: Added initial check
+                                            if (initial) {
+                                                // Remember retry only at initial task
+                                                this.writeRetry(entity, callback);
+                                            }
+                                            else {
+                                                callback();
+                                            }
+                                        }
+                                    ], callback);
+                                });
                             });
                         },
-                        (callback) => {
-                            this.endTask(callback);
-                        },
-                        (callback) => {
-                            let isFinal = this.isFinal();
-                            if (isFinal) {
-                                // Delete linked blob only at final task
-                                this.deleteEntityBlob(this.message, callback);
-                            }
-                            else {
-                                // Pass message to another queue
-                                // SS: Added forwarding message for seq transfer process
-                                var transferQueue = this._parameters.getAsObject(ChangesTransferParam.TransferQueue) as IMessageQueue;
-                                if (transferQueue != null) {
-                                    transferQueue.send(this.correlationId, this.message, callback);
-                                }
-                                else {
-                                    callback();
-                                }
-                            }
-                        },
-                        (callback) => {
-                            // SS: Added initial check
-                            if (initial) {
-                                // Remember retry only at initial task
-                                this.writeRetry(entity, callback);
-                            }
-                            else {
-                                callback();
-                            }
-                        },
                     ], (err) => {
-                        let processNotFoundException = err as ProcessNotFoundExceptionV1;
-                        if (processNotFoundException) {
+                        //if (err instanceof ProcessNotFoundExceptionV1) {
+                        if (this.checkErrorType(err, ProcessNotFoundExceptionV1)) {
                             this._logger.error(this.processId, err, 'Received a message for unknown process %s. Skipping...', this.name);
                             this.moveMessageToDead(callback);
                             return;
                         }
 
-                        let processStoppedException = err as ProcessStoppedExceptionV1;
-                        if (processStoppedException) {
+                        //if (err instanceof ProcessStoppedExceptionV1) {
+                        if (this.checkErrorType(err, ProcessStoppedExceptionV1)) {
                             this._logger.error(this.processId, err, 'Received a message for inactive process %s. Skipping...', this.name);
                             this.moveMessageToDead(callback);
                             return;
@@ -329,27 +342,26 @@ export class ChangePostTask<T, K> extends Task {
         });
     }
 
-    private postEntityErrorHandler(err: any, callback: (err: any) => void): void {
-        let entityRequestReviewException = err as EntityRequestReviewException;
-        if (entityRequestReviewException != null) {
+    private postEntityErrorHandler(error: any, callback: (err: any, terminate: boolean) => void): void {
+        if (error instanceof EntityRequestReviewException) {
+
             this._logger.info(this.processId, 'User review was requested for %s', this.name);
-            this.requestResponseForProcess(entityRequestReviewException.message, this.queue.getName(), this.message, (err) => {
-                callback(err || entityRequestReviewException);
+            this.requestResponseForProcess(error.message, this.queue.getName(), this.message, (err) => {
+                callback(err, true);
             });
             return;
         }
 
-        let entityPostponeException = err as EntityPostponeException;
-        if (entityPostponeException != null) {
+        if (error instanceof EntityPostponeException) {
             // On postpone fail the task and request recovery
             var postponeTimeout = this._parameters.getAsIntegerWithDefault(
                 ChangesTransferParam.PostponeTimeout, ChangePostTask.DefaultPostponeTimeout);
 
             this._logger.info(this.processId, 'Processing of %s was postponed for %s', this.name, postponeTimeout);
 
-            this.failAndRecoverProcess('Processing was postponed - ' + entityPostponeException.message,
+            this.failAndRecoverProcess('Processing was postponed - ' + error.message,
                 this.queue.getName(), this.message, postponeTimeout, (err) => {
-                    callback(err || entityPostponeException);
+                    callback(err, true);
                 });
 
             return;
@@ -365,12 +377,22 @@ export class ChangePostTask<T, K> extends Task {
 
             this.failAndRecoverProcess('Processing was postponed - ' + taskCanceledException.message,
                 this.queue.getName(), this.message, postponeTimeout, (err) => {
-                    callback(err || taskCanceledException);
+                    callback(err || taskCanceledException, true);
                 });
 
             return;
         }
 
-        callback(err);
+        callback(error, error != null);
+    }
+
+    private isChangeable(obj: any): obj is IChangeable {
+        let changeable = obj as IChangeable;
+        return changeable.deleted !== undefined || changeable.change_time !== undefined || changeable.create_time !== undefined;
+    }
+
+    private isIdentifiable<K>(obj: any): obj is IIdentifiable<K> {
+        let identifiable = obj as IIdentifiable<K>;
+        return identifiable.id !== undefined;
     }
 }

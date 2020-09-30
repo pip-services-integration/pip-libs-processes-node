@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchSyncMessage = void 0;
 class BatchSyncMessage {
 }
 exports.BatchSyncMessage = BatchSyncMessage;

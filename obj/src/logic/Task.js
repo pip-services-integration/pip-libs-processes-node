@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.Task = void 0;
 let async = require('async');
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const pip_services3_messaging_node_1 = require("pip-services3-messaging-node");
@@ -8,13 +9,6 @@ const KnownDescriptors_1 = require("./KnownDescriptors");
 const pip_clients_processstates_node_1 = require("pip-clients-processstates-node");
 const TaskProcessStage_1 = require("./TaskProcessStage");
 const ProcessParam_1 = require("./ProcessParam");
-/*
-process -> Process
-workflowStatus -> ProcessStates
-Activity -> Task
-ActivityStatus -> TaskStateV1
-Recovery -> Recovery
-*/
 class Task {
     constructor() {
     }
@@ -24,7 +18,7 @@ class Task {
             return;
         }
         if (taskType == null) {
-            callback(new Error('Activity type cannot be null'));
+            callback(new Error('Task type cannot be null'));
             return;
         }
         if (references == null) {
@@ -43,7 +37,7 @@ class Task {
         this.statusSection = processType + '.Status';
         let settingsSection = this.getSettingsSection();
         let correlationId = this.getCorrelationId();
-        this._settingsClient.setSection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastActivationTimeUtc', new Date(Date.now())), (err, parameters) => {
+        this._settingsClient.setSection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastActivationTimeUtc', new Date()), (err, parameters) => {
             callback(err);
         });
     }
@@ -59,15 +53,15 @@ class Task {
         this._retriesClient = this._references.getOneRequired(KnownDescriptors_1.KnownDescriptors.Retries);
     }
     setParameters(parameters) {
-        this._parameters = ((parameters !== null && parameters !== void 0 ? parameters : new pip_services3_commons_node_1.Parameters())).override(parameters);
+        this._parameters = (parameters !== null && parameters !== void 0 ? parameters : new pip_services3_commons_node_1.Parameters()).override(parameters);
         this.correlationId = this._parameters.getAsStringWithDefault('correlation_id', this.correlationId);
     }
     getCorrelationId() {
         var _a;
-        return _a = this.processId, (_a !== null && _a !== void 0 ? _a : this.correlationId);
+        return (_a = this.processId) !== null && _a !== void 0 ? _a : this.correlationId;
     }
     getSettingsSection(section) {
-        return ((section !== null && section !== void 0 ? section : this.statusSection)) + '.' + this.processId;
+        return (section !== null && section !== void 0 ? section : this.statusSection) + '.' + this.processId;
     }
     toMessageEnvelope(message) {
         var _a;
@@ -75,7 +69,7 @@ class Task {
             return null;
         if (message.constructor.name === 'MessageEnvelope')
             return message;
-        return new pip_services3_messaging_node_1.MessageEnvelope((_a = this.processId, (_a !== null && _a !== void 0 ? _a : this.correlationId)), null, message);
+        return new pip_services3_messaging_node_1.MessageEnvelope((_a = this.processId) !== null && _a !== void 0 ? _a : this.correlationId, null, message);
     }
     sendMessage(queueName, message, callback) {
         var queue = this._references.getOneRequired(KnownDescriptors_1.KnownDescriptors.messageQueue(queueName));
@@ -144,48 +138,55 @@ class Task {
         let timeToLive = this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.ProcessTimeToLive);
         let message = this.toMessage(this.message);
         let settingsSection = this.getSettingsSection();
-        async.series((callback) => {
-            // Start activity
-            this._processStatesClient.startProcess(correlationId, this.processType, processKey, this.taskType, this.queue.getName(), message, timeToLive, (err, state) => {
-                if (err) {
-                    callback(err);
+        async.series([
+            (callback) => {
+                // Start process
+                this._processStatesClient.startProcess(correlationId, this.processType, processKey, this.taskType, this.queue.getName(), message, timeToLive, (err, state) => {
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
+                    this.processState = state;
+                    callback();
+                });
+            },
+            (callback) => {
+                // Set process info
+                this.processKey = processKey;
+                this.processId = this.processState.id;
+                // Set current task info
+                this.taskState = this.getCurrentTask();
+                this.taskState.queue_name = this.queue.getName();
+                this.taskState.message = message;
+                this.processStage = TaskProcessStage_1.TaskProcessStage.Processing;
+                // Write debug message
+                if (processKey != null)
+                    this._logger.debug(this.processId, 'Started process %s with key %s', this.name, processKey);
+                else
+                    this._logger.debug(this.processId, 'Started process %s', this.name);
+                callback();
+            },
+            (callback) => {
+                // Write status
+                if (this.statusSection != null) {
+                    callback();
                     return;
                 }
-                this.processState = state;
-                callback();
-            });
-        }, (callback) => {
-            // Set process info
-            this.processKey = processKey;
-            this.processId = this.processState.id;
-            // Set current activity info
-            this.taskState = this.getCurrentTask();
-            this.taskState.queue_name = this.queue.getName();
-            this.taskState.message = message;
-            this.processStage = TaskProcessStage_1.TaskProcessStage.Processing;
-            // Write debug message
-            if (processKey != null)
-                this._logger.debug(this.processId, 'Started process %s with key %s', this.name, processKey);
-            else
-                this._logger.debug(this.processId, 'Started process %s', this.name);
-            callback();
-        }, (callback) => {
-            // Write status
-            if (this.statusSection != null) {
-                callback();
+                this._settingsClient.setSection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastStartedTimeUtc', new Date(Date.now())), (err, parameters) => {
+                    callback(err);
+                });
+            },
+            (callback) => {
+                // Write status
+                if (this.statusSection != null) {
+                    callback();
+                    return;
+                }
+                this._settingsClient.modifySection(correlationId, settingsSection, null, pip_services3_commons_node_1.ConfigParams.fromTuples('StartedProcesss', 1), (err, parameters) => {
+                    callback(err);
+                });
             }
-            this._settingsClient.setSection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastStartedTimeUtc', new Date(Date.now())), (err, parameters) => {
-                callback(err);
-            });
-        }, (callback) => {
-            // Write status
-            if (this.statusSection != null) {
-                callback();
-            }
-            this._settingsClient.modifySection(correlationId, settingsSection, null, pip_services3_commons_node_1.ConfigParams.fromTuples('StartedProcesss', 1), (err, parameters) => {
-                callback(err);
-            });
-        }, (err) => {
+        ], (err) => {
             if (err) {
                 this._logger.error(correlationId, err, 'Failed to start process %s', this.name);
             }
@@ -218,7 +219,7 @@ class Task {
                 // Set process info
                 this.processKey = processKey;
                 this.processId = this.processState.id;
-                // Set current activity info
+                // Set current task info
                 this.taskState = this.getCurrentTask();
                 this.taskState.queue_name = this.queue.getName();
                 this.taskState.message = message;
@@ -234,6 +235,7 @@ class Task {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
                 this._settingsClient.setSection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastStartedTimeUtc', new Date(Date.now())), (err, parameters) => {
                     callback(err);
@@ -243,6 +245,7 @@ class Task {
                 // Write status
                 if (this.statusSection != null) {
                     callback();
+                    return;
                 }
                 this._settingsClient.modifySection(correlationId, settingsSection, null, pip_services3_commons_node_1.ConfigParams.fromTuples('StartedProcesss', 1), (err, parameters) => {
                     callback(err);
@@ -265,7 +268,7 @@ class Task {
         async.series([
             (callback) => {
                 // Call the service and start process
-                this._processStatesClient.activateProcess(correlationId, processId, this.taskType, this.queue.getName(), message, (err, state) => {
+                this._processStatesClient.activateProcess(correlationId, processId !== null && processId !== void 0 ? processId : this.processId, this.taskType, this.queue.getName(), message, (err, state) => {
                     if (err) {
                         callback(err);
                         return;
@@ -315,7 +318,7 @@ class Task {
             (callback) => {
                 // Set process info
                 this.processId = this.processState.id;
-                // Set current activity info
+                // Set current task info
                 this.taskState = this.getCurrentTask();
                 this.taskState.queue_name = this.queue.getName();
                 this.taskState.message = message;
@@ -394,7 +397,7 @@ class Task {
                     callback(new Error('Recovery message cannot be null'));
                     return;
                 }
-                recoveryTimeout = (recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout));
+                recoveryTimeout = recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout);
                 this._processStatesClient.continueAndRecoverProcess(correlationId, this.processState, recoveryQueue, message, recoveryTimeout, (err) => {
                     callback(err);
                 });
@@ -419,7 +422,7 @@ class Task {
         let correlationId = this.getCorrelationId();
         async.series([
             (callback) => {
-                recoveryTimeout = (recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout));
+                recoveryTimeout = recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout);
                 this._processStatesClient.repeatProcessRecovery(correlationId, this.processState, recoveryTimeout, (err) => {
                     callback(err);
                 });
@@ -534,7 +537,7 @@ class Task {
                     callback(new Error('Recovery message cannot be null'));
                     return;
                 }
-                recoveryTimeout = (recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout));
+                recoveryTimeout = recoveryTimeout !== null && recoveryTimeout !== void 0 ? recoveryTimeout : this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout);
                 this._processStatesClient.failAndRecoverProcess(correlationId, this.processState, errorMessage, recoveryQueue, message, recoveryTimeout, (err) => {
                     callback(err);
                 });
@@ -574,6 +577,7 @@ class Task {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
                 this._settingsClient.modifySection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastFailedTimeUtc', new Date(Date.now())), pip_services3_commons_node_1.ConfigParams.fromTuples('FailedProcesss', 1), (err, parameters) => {
                     callback(err);
@@ -608,6 +612,7 @@ class Task {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
                 this._settingsClient.modifySection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastCompletedTimeUtc', new Date(Date.now())), pip_services3_commons_node_1.ConfigParams.fromTuples('CompletedProcesss', 1), (err, parameters) => {
                     callback(err);
@@ -643,6 +648,7 @@ class Task {
                 // Write status
                 if (settingsSection != null) {
                     callback();
+                    return;
                 }
                 this._settingsClient.modifySection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples('LastAbortedTimeUtc', new Date(Date.now())), pip_services3_commons_node_1.ConfigParams.fromTuples('AbortedProcesss', 1), (err, parameters) => {
                     callback(err);
@@ -659,17 +665,17 @@ class Task {
     getProcessDataAs(key) {
         this.checkCurrentProcess();
         var processData = this.getProcessData();
-        var data = processData.getAsObject(key);
+        var data = processData.get(key);
         var correlationId = this.getCorrelationId();
         this._logger.debug(correlationId, 'Get process data for key %s: %s', key, data);
-        return data;
+        return data ? JSON.parse(data) : undefined;
     }
     setProcessData(key, data) {
         this.checkCurrentProcess();
         var correlationId = this.getCorrelationId();
         this._logger.debug(correlationId, 'Set process data for key %s: %s', key, data);
         var processData = this.getProcessData();
-        processData.setAsObject(key, data);
+        processData.set(key, JSON.stringify(data));
     }
     readSettings(section, callback) {
         var settingsSection = this.getSettingsSection(section);
@@ -686,10 +692,9 @@ class Task {
         });
     }
     writeSettingsKey(section, key, value, callback) {
-        var _a;
         var settingsSection = this.getSettingsSection(section);
         var correlationId = this.getCorrelationId();
-        this._logger.debug(correlationId, 'Write storage settings for key %s: %s', key, (_a = value) === null || _a === void 0 ? void 0 : _a.ToString());
+        this._logger.debug(correlationId, 'Write storage settings for key %s: %s', key, value === null || value === void 0 ? void 0 : value.toString());
         this._settingsClient.modifySection(correlationId, settingsSection, pip_services3_commons_node_1.ConfigParams.fromTuples(key, value), null, (err, parameters) => {
             callback(err, parameters);
         });
@@ -712,18 +717,19 @@ class Task {
             callback(err, internalId);
         });
     }
-    getTypeName() {
-        var TCtor;
-        var typeName = typeof (TCtor).name;
-        return typeName;
-    }
     getProcessData() {
         var processData = this.processState.data;
         if (!processData) {
-            this.processState.data = new pip_services3_commons_node_1.AnyValueMap();
+            this.processState.data = new Map();
             processData = this.processState.data;
         }
         return processData;
+    }
+    checkErrorType(err, errorClass) {
+        var typedError = new errorClass();
+        var typedErrorCode = typedError && typedError.hasOwnProperty('code') ? typedError['code'] : null;
+        var errCode = err && err.hasOwnProperty('code') ? err['code'] : null;
+        return typedErrorCode != null && errCode != null && typedErrorCode === errCode;
     }
 }
 exports.Task = Task;

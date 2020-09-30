@@ -7,10 +7,10 @@ import { ChangesTransferParam } from './ChangesTransferParam';
 
 export class BatchesSequenceTransferProcess<T, K> extends SequenceTransferProcess<T, K>
 {
-    public constructor(workflowType: string, references: IReferences, parameters: Parameters) {
-        super(workflowType, references, parameters);
+    public constructor(processType: string, references: IReferences, parameters: Parameters) {
+        super(processType, references, parameters);
 
-        // this sub-class uses _pollAdapter from the SequenceTransferWorkflow class and it is required here
+        // this sub-class uses _pollAdapter from the SequenceTransferProcess class and it is required here
         if (this._pollAdapter == null)
             throw new Error('PollAdapter is not defined or doesn\'t implement IReadWrite client interface');
 

@@ -1,7 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchSyncRecoveryTask = void 0;
 let async = require('async');
 const Task_1 = require("../logic/Task");
+const pip_clients_processstates_node_1 = require("pip-clients-processstates-node");
 const BatchSyncParam_1 = require("./BatchSyncParam");
 const ProcessParam_1 = require("../logic/ProcessParam");
 const BatchSyncMessage_1 = require("./BatchSyncMessage");
@@ -12,7 +14,7 @@ class BatchSyncRecoveryTask extends Task_1.Task {
         var downloadResponseQueue = this._parameters.get(BatchSyncParam_1.BatchSyncParam.DownloadResponseQueue);
         var uploadResponseQueue = this._parameters.get(BatchSyncParam_1.BatchSyncParam.UploadResponseQueue);
         var recoveryTimeout = this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout);
-        var typeName = this.getTypeName();
+        var entityType = this._parameters.getAsNullableString(ProcessParam_1.ProcessParam.EntityType);
         async.series([
             (callback) => {
                 // Activate the process
@@ -22,9 +24,9 @@ class BatchSyncRecoveryTask extends Task_1.Task {
             },
             (callback) => {
                 if (this.message.message_type == BatchSyncMessage_1.BatchSyncMessage.RecoveryDownload)
-                    this.recoveryDownload(downloadResponseQueue, typeName, recoveryTimeout, callback);
+                    this.recoveryDownload(downloadResponseQueue, entityType, recoveryTimeout, callback);
                 else if (this.message.message_type == BatchSyncMessage_1.BatchSyncMessage.RecoveryUpload)
-                    this.recoveryUpload(uploadResponseQueue, typeName, recoveryTimeout, callback);
+                    this.recoveryUpload(uploadResponseQueue, entityType, recoveryTimeout, callback);
                 else {
                     // If unknown message same then fail the process
                     this._logger.error(this.processId, null, '%s process received unrecognized message %s. Ignoring...', this.name, this.message);
@@ -39,14 +41,14 @@ class BatchSyncRecoveryTask extends Task_1.Task {
                 }
             }
         ], (err) => {
-            let processNotFoundException = err;
-            if (processNotFoundException) {
+            //if (err instanceof ProcessNotFoundExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessNotFoundExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for unknown process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
             }
-            let processStoppedException = err;
-            if (processStoppedException) {
+            //if (err instanceof ProcessStoppedExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessStoppedExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for inactive process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
@@ -61,9 +63,6 @@ class BatchSyncRecoveryTask extends Task_1.Task {
                 if (incremental) {
                     var startSyncTimeUtc = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.LastSyncTimeUtc);
                     var stopSyncTimeUtc = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.StopSyncTimeUtc);
-                    //var settings = await SettingsClient.ReadAsync(CorrelationId, StatusSection);
-                    //var startSyncTimeUtc = settings.GetAsDateTime(BatchSyncParam.LastSyncTimeUtc);
-                    //var stopSyncTimeUtc = settings.GetAsDateTime(BatchSyncParam.StopSyncTimeUtc);
                     var filter = new pip_services3_commons_node_1.FilterParams();
                     filter.setAsObject('FromDateTime', startSyncTimeUtc);
                     filter.setAsObject('ToDateTime', stopSyncTimeUtc);
@@ -88,7 +87,7 @@ class BatchSyncRecoveryTask extends Task_1.Task {
             }
         ], callback);
     }
-    recoveryUpload(responseQueue, typeName, recoveryTimeout, callback) {
+    recoveryUpload(responseQueue, entityType, recoveryTimeout, callback) {
         let incremental = this._parameters.getAsBooleanWithDefault(BatchSyncParam_1.BatchSyncParam.IncrementalChanges, false);
         async.series([
             (callback) => {
@@ -97,14 +96,14 @@ class BatchSyncRecoveryTask extends Task_1.Task {
                 if (incremental) {
                     let uploadAdapter = this._parameters.get(BatchSyncParam_1.BatchSyncParam.UploadAdapter);
                     uploadAdapter.uploadChanges(this.processId, blobIds, responseQueue.getName(), null, (err) => {
-                        this._logger.debug(this.processId, 'Recovered upload of changes %s', typeName);
+                        this._logger.debug(this.processId, 'Recovered upload of changes %s', entityType);
                         callback(err);
                     });
                 }
                 else {
                     let uploadAdapter = this._parameters.get(BatchSyncParam_1.BatchSyncParam.UploadAdapter);
                     uploadAdapter.uploadAll(this.processId, blobIds, responseQueue.getName(), null, (err) => {
-                        this._logger.debug(this.processId, 'Recovered upload of all %s', typeName);
+                        this._logger.debug(this.processId, 'Recovered upload of all %s', entityType);
                         callback(err);
                     });
                 }

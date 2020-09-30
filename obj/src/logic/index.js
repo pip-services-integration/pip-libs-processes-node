@@ -1,19 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var ForwardMessageTask_1 = require("./ForwardMessageTask");
-exports.ForwardMessageTask = ForwardMessageTask_1.ForwardMessageTask;
+Object.defineProperty(exports, "ForwardMessageTask", { enumerable: true, get: function () { return ForwardMessageTask_1.ForwardMessageTask; } });
 var KnownDescriptors_1 = require("./KnownDescriptors");
-exports.KnownDescriptors = KnownDescriptors_1.KnownDescriptors;
+Object.defineProperty(exports, "KnownDescriptors", { enumerable: true, get: function () { return KnownDescriptors_1.KnownDescriptors; } });
 var NullTask_1 = require("./NullTask");
-exports.NullTask = NullTask_1.NullTask;
+Object.defineProperty(exports, "NullTask", { enumerable: true, get: function () { return NullTask_1.NullTask; } });
 var Process_1 = require("./Process");
-exports.Process = Process_1.Process;
+Object.defineProperty(exports, "Process", { enumerable: true, get: function () { return Process_1.Process; } });
 var ProcessParam_1 = require("./ProcessParam");
-exports.ProcessParam = ProcessParam_1.ProcessParam;
+Object.defineProperty(exports, "ProcessParam", { enumerable: true, get: function () { return ProcessParam_1.ProcessParam; } });
 var Task_1 = require("./Task");
-exports.Task = Task_1.Task;
+Object.defineProperty(exports, "Task", { enumerable: true, get: function () { return Task_1.Task; } });
 var TaskHandler_1 = require("./TaskHandler");
-exports.TaskHandler = TaskHandler_1.TaskHandler;
+Object.defineProperty(exports, "TaskHandler", { enumerable: true, get: function () { return TaskHandler_1.TaskHandler; } });
 var TaskProcessStage_1 = require("./TaskProcessStage");
-exports.TaskProcessStage = TaskProcessStage_1.TaskProcessStage;
+Object.defineProperty(exports, "TaskProcessStage", { enumerable: true, get: function () { return TaskProcessStage_1.TaskProcessStage; } });
 //# sourceMappingURL=index.js.map

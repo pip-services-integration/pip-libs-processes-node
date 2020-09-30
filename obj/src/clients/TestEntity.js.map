@@ -1,1 +1,1 @@
-{"version":3,"file":"TestEntity.js","sourceRoot":"","sources":["../../../src/clients/TestEntity.ts"],"names":[],"mappings":";;AACA,2CAAwC;AAExC,MAAa,UAAW,SAAQ,eAAM;IAW3B,QAAQ;QACX,OAAO,QAAQ,GAAG,IAAI,CAAC,EAAE,CAAC;IAC9B,CAAC;CACJ;AAdD,gCAcC"}
+{"version":3,"file":"TestEntity.js","sourceRoot":"","sources":["../../../src/clients/TestEntity.ts"],"names":[],"mappings":";;;AACA,2CAAwC;AAExC,MAAa,UAAW,SAAQ,eAAM;IAW3B,QAAQ;QACX,OAAO,QAAQ,GAAG,IAAI,CAAC,EAAE,CAAC;IAC9B,CAAC;CACJ;AAdD,gCAcC"}

@@ -10,6 +10,8 @@ export class EntityRequestReviewException extends InvalidStateException {
 	 */
 	public constructor(correlationId: string = null, entityId: string = null, message: string = null) {
         super(correlationId, 'ENTITY_REQUEST_REVIEW', message || 'Requested review for entity with id ' + entityId);
-        this.withDetails('entity_id', entityId);
+		this.withDetails('entity_id', entityId);
+		
+		Object.setPrototypeOf(this, EntityRequestReviewException.prototype);
 	}
 }

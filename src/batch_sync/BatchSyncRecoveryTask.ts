@@ -15,7 +15,7 @@ export class BatchSyncRecoveryTask<T> extends Task {
         var downloadResponseQueue = this._parameters.get(BatchSyncParam.DownloadResponseQueue) as IMessageQueue;
         var uploadResponseQueue = this._parameters.get(BatchSyncParam.UploadResponseQueue) as IMessageQueue;
         var recoveryTimeout = this._parameters.getAsNullableInteger(ProcessParam.RecoveryTimeout);
-        var typeName = this.getTypeName<T>();
+        var entityType = this._parameters.getAsNullableString(ProcessParam.EntityType);
 
         async.series([
             (callback) => {
@@ -26,9 +26,9 @@ export class BatchSyncRecoveryTask<T> extends Task {
             },
             (callback) => {
                 if (this.message.message_type == BatchSyncMessage.RecoveryDownload)
-                    this.recoveryDownload(downloadResponseQueue, typeName, recoveryTimeout, callback);
+                    this.recoveryDownload(downloadResponseQueue, entityType, recoveryTimeout, callback);
                 else if (this.message.message_type == BatchSyncMessage.RecoveryUpload)
-                    this.recoveryUpload(uploadResponseQueue, typeName, recoveryTimeout, callback);
+                    this.recoveryUpload(uploadResponseQueue, entityType, recoveryTimeout, callback);
                 else {
                     // If unknown message same then fail the process
                     this._logger.error(this.processId, null, '%s process received unrecognized message %s. Ignoring...', this.name, this.message);
@@ -43,15 +43,15 @@ export class BatchSyncRecoveryTask<T> extends Task {
                 }
             }
         ], (err) => {
-            let processNotFoundException = err as ProcessNotFoundExceptionV1;
-            if (processNotFoundException) {
+            //if (err instanceof ProcessNotFoundExceptionV1) {
+            if (this.checkErrorType(err, ProcessNotFoundExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for unknown process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
             }
 
-            let processStoppedException = err as ProcessStoppedExceptionV1;
-            if (processStoppedException) {
+            //if (err instanceof ProcessStoppedExceptionV1) {
+            if (this.checkErrorType(err, ProcessStoppedExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for inactive process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
@@ -69,9 +69,6 @@ export class BatchSyncRecoveryTask<T> extends Task {
                 if (incremental) {
                     var startSyncTimeUtc = this.getProcessDataAs<Date>(BatchSyncParam.LastSyncTimeUtc);
                     var stopSyncTimeUtc = this.getProcessDataAs<Date>(BatchSyncParam.StopSyncTimeUtc);
-                    //var settings = await SettingsClient.ReadAsync(CorrelationId, StatusSection);
-                    //var startSyncTimeUtc = settings.GetAsDateTime(BatchSyncParam.LastSyncTimeUtc);
-                    //var stopSyncTimeUtc = settings.GetAsDateTime(BatchSyncParam.StopSyncTimeUtc);
 
                     var filter = new FilterParams();
                     filter.setAsObject('FromDateTime', startSyncTimeUtc);
@@ -103,7 +100,7 @@ export class BatchSyncRecoveryTask<T> extends Task {
         ], callback);
     }
 
-    private recoveryUpload(responseQueue: IMessageQueue, typeName: string, recoveryTimeout: number,
+    private recoveryUpload(responseQueue: IMessageQueue, entityType: string, recoveryTimeout: number,
         callback: (err: any) => void) {
         let incremental = this._parameters.getAsBooleanWithDefault(BatchSyncParam.IncrementalChanges, false);
 
@@ -114,14 +111,14 @@ export class BatchSyncRecoveryTask<T> extends Task {
                 if (incremental) {
                     let uploadAdapter = this._parameters.get(BatchSyncParam.UploadAdapter) as IBatchChangesClient<T>;
                     uploadAdapter.uploadChanges(this.processId, blobIds, responseQueue.getName(), null, (err) => {
-                        this._logger.debug(this.processId, 'Recovered upload of changes %s', typeName);
+                        this._logger.debug(this.processId, 'Recovered upload of changes %s', entityType);
                         callback(err);
                     });
                 }
                 else {
                     let uploadAdapter = this._parameters.get(BatchSyncParam.UploadAdapter) as IBatchAllClient<T>;
                     uploadAdapter.uploadAll(this.processId, blobIds, responseQueue.getName(), null, (err) => {
-                        this._logger.debug(this.processId, 'Recovered upload of all %s', typeName);
+                        this._logger.debug(this.processId, 'Recovered upload of all %s', entityType);
                         callback(err);
                     });
                 }

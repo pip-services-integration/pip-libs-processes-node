@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.AdapterClient = void 0;
 const pip_services3_commons_node_1 = require("pip-services3-commons-node");
 const pip_services3_components_node_1 = require("pip-services3-components-node");
 const CapabilitiesMap_1 = require("../data/CapabilitiesMap");
@@ -9,7 +10,7 @@ class AdapterClient {
         this._counters = new pip_services3_components_node_1.CompositeCounters();
         if (address == null || address == "")
             throw new pip_services3_commons_node_1.ApplicationException("Service URL is required");
-        this.adapter = (adapter !== null && adapter !== void 0 ? adapter : this.constructor.name);
+        this.adapter = adapter !== null && adapter !== void 0 ? adapter : this.constructor.name;
         this.service = service;
         this.address = address;
         this.capabilities = new CapabilitiesMap_1.CapabilitiesMap();
@@ -20,11 +21,11 @@ class AdapterClient {
         this._counters.setReferences(references);
     }
     instrument(correlationId, methodName, message = "") {
-        this._logger.trace(correlationId, "Called {0}.{1}.{2} {3}", this.adapter, this.service, methodName, message);
+        this._logger.trace(correlationId, "Called %s.%s.%s %s", this.adapter, this.service, methodName, message);
         return this._counters.beginTiming(this.adapter + "." + this.service + "." + methodName + ".call_time");
     }
     handleError(correlationId, methodName, error) {
-        this._logger.error(correlationId, error, "Failed to call {0}.{1}.{2}", this.adapter, this.service, methodName);
+        this._logger.error(correlationId, error, "Failed to call %s.%s.%s", this.adapter, this.service, methodName);
         // Unwrap the exception
         while (error.InnerException != null)
             error = error.InnerException;

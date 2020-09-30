@@ -23,7 +23,10 @@ export class TestEntityGenerator extends RandomDataGenerator<TestEntity> {
             release_date: RandomDateTime.nextDate(utcNow),
             msrp: RandomInteger.nextInteger(10, 500),
             color: RandomArray.pick(["red", "green", "blue", "orange"]),
-            day: RandomInteger.nextInteger(1, 8)
+            day: RandomInteger.nextInteger(1, 8),
+            create_time: utcNow,
+            change_time: utcNow,
+            deleted: false
         };
 
         entity.price = RandomFloat.updateFloat(entity.msrp);
@@ -49,7 +52,7 @@ export class TestEntityGenerator extends RandomDataGenerator<TestEntity> {
 
     public delete(item: TestEntity, references?: DataReferences): TestEntity {
         // Logical deletion
-        //item.is_deleted = true;
+        item.deleted = true;
         item.change_time = new Date();
         return item;
     }

@@ -10,7 +10,7 @@ import { ISettingsClientV1 } from 'pip-clients-settings-node';
 import { ITaskHandler } from './ITaskHandler';
 export declare class TaskHandler implements ITaskHandler {
     maxNumberOfAttempts: number;
-    private _cancel;
+    protected _cancel: boolean;
     private _references;
     private _logger;
     private _counters;
@@ -40,4 +40,5 @@ export declare class TaskHandler implements ITaskHandler {
     private handlePoisonMessages;
     receiveMessage(message: MessageEnvelope, queue: IMessageQueue, callback: (err: any) => void): void;
     close(correlationId: string, callback: (err: any) => void): void;
+    protected checkErrorType(err: any, errorClass: any): boolean;
 }

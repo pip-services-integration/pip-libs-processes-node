@@ -33,12 +33,12 @@ export class AdapterClient implements ICapableClient, IReferenceable {
     }
 
     protected instrument(correlationId: string, methodName: string, message: string = ""): Timing {
-        this._logger.trace(correlationId, "Called {0}.{1}.{2} {3}", this.adapter, this.service, methodName, message);
+        this._logger.trace(correlationId, "Called %s.%s.%s %s", this.adapter, this.service, methodName, message);
         return this._counters.beginTiming(this.adapter + "." + this.service + "." + methodName + ".call_time");
     }
 
     protected handleError(correlationId: string, methodName: string, error: any): any {
-        this._logger.error(correlationId, error, "Failed to call {0}.{1}.{2}", this.adapter, this.service, methodName);
+        this._logger.error(correlationId, error, "Failed to call %s.%s.%s", this.adapter, this.service, methodName);
 
         // Unwrap the exception
         while (error.InnerException != null)

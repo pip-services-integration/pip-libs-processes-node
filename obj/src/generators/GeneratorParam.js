@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.GeneratorParam = void 0;
 class GeneratorParam {
 }
 exports.GeneratorParam = GeneratorParam;

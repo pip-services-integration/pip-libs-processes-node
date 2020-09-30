@@ -4,6 +4,7 @@ import { IClosable } from 'pip-services3-commons-node';
 import { ITaskHandler } from './ITaskHandler';
 import { CompositeLogger } from 'pip-services3-components-node';
 import { IMessageQueue } from 'pip-services3-messaging-node';
+import { Task } from './Task';
 export declare class Process implements IReferenceable, IParameterized, IClosable {
     protected static readonly _defaultParameters: Parameters;
     private _handlers;
@@ -19,7 +20,7 @@ export declare class Process implements IReferenceable, IParameterized, IClosabl
     setReferences(references: IReferences): void;
     setParameters(parameters: Parameters): void;
     close(correlationId: string, callback?: (err: any) => void): void;
-    addTask<T>(taskType: string, queue: IMessageQueue, numberOfListeners?: number, parameters?: Parameters): Process;
+    addTask<T extends Task>(taskType: string, taskClass: (new () => T), queue: IMessageQueue, numberOfListeners?: number, parameters?: Parameters): Process;
     beginListen(): void;
     addTaskHandler(taskHandler: ITaskHandler): Process;
 }

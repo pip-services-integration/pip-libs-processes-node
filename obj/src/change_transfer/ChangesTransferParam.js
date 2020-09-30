@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ChangesTransferParam = void 0;
 class ChangesTransferParam {
 }
 exports.ChangesTransferParam = ChangesTransferParam;

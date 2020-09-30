@@ -5,6 +5,10 @@ import { ProcessParam } from "./ProcessParam";
 import { IMessageQueue } from "pip-services3-messaging-node";
 
 export class ForwardMessageTask extends Task {
+    constructor() {
+        super();
+    }
+
     public execute(callback: (err: any) => void): void {
         var initial = this._parameters.getAsBooleanWithDefault(ProcessParam.IsInitial, true);
         var final = this._parameters.getAsBooleanWithDefault(ProcessParam.IsFinal, true);

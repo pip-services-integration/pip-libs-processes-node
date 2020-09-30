@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BatchSyncUploadTask = void 0;
 let async = require('async');
 const Task_1 = require("../logic/Task");
 const ProcessParam_1 = require("../logic/ProcessParam");
 const pip_services3_messaging_node_1 = require("pip-services3-messaging-node");
+const pip_clients_processstates_node_1 = require("pip-clients-processstates-node");
 const BatchSyncParam_1 = require("./BatchSyncParam");
 const BatchSyncMessage_1 = require("./BatchSyncMessage");
 class BatchSyncUploadTask extends Task_1.Task {
@@ -12,7 +14,7 @@ class BatchSyncUploadTask extends Task_1.Task {
         var uploadResponseQueue = this._parameters.getAsObject(BatchSyncParam_1.BatchSyncParam.UploadResponseQueue);
         var recoveryQueue = this._parameters.getAsObject(ProcessParam_1.ProcessParam.RecoveryQueue);
         var recoveryTimeout = this._parameters.getAsNullableInteger(ProcessParam_1.ProcessParam.RecoveryTimeout);
-        var typeName = this.getTypeName();
+        var entityType = this._parameters.getAsNullableString(ProcessParam_1.ProcessParam.EntityType);
         async.series([
             (callback) => {
                 // Activate the process
@@ -30,10 +32,7 @@ class BatchSyncUploadTask extends Task_1.Task {
                 }
                 // If no data was downloaded then complete the transaction
                 else if (response.blob_ids == null || response.blob_ids.length == 0) {
-                    this._logger.warn(this.processId, 'No %s were downloaded. The process %s is interrupted.', typeName, this.name);
-                    //var settings = await SettingsClient.ReadAsync(CorrelationId, StatusSection);
-                    //var stopTime = settings.GetAsDateTime(BatchSyncParam.StopSyncTimeUtc);
-                    //await WriteSettingsKeyAsync(StatusSection, BatchSyncParam.LastSyncTimeUtc, stopTime);
+                    this._logger.warn(this.processId, 'No %s were downloaded. The process %s is interrupted.', entityType, this.name);
                     var stopTime = this.getProcessDataAs(BatchSyncParam_1.BatchSyncParam.StopSyncTimeUtc);
                     async.series([
                         (callback) => {
@@ -59,7 +58,7 @@ class BatchSyncUploadTask extends Task_1.Task {
                             }
                         },
                         (callback) => {
-                            this._logger.info(this.processId, 'Requested to upload all %s', typeName);
+                            this._logger.info(this.processId, 'Requested to upload all %s', entityType);
                             // Continue the process
                             this.continueProcessWithRecovery(recoveryQueue.getName(), new pip_services3_messaging_node_1.MessageEnvelope(this.processId, BatchSyncMessage_1.BatchSyncMessage.RecoveryUpload, response.blob_ids), recoveryTimeout, callback);
                         }
@@ -69,14 +68,14 @@ class BatchSyncUploadTask extends Task_1.Task {
                 }
             }
         ], (err) => {
-            let processNotFoundException = err;
-            if (processNotFoundException) {
+            //if (err instanceof ProcessNotFoundExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessNotFoundExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for unknown process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;
             }
-            let processStoppedException = err;
-            if (processStoppedException) {
+            //if (err instanceof ProcessStoppedExceptionV1) {
+            if (this.checkErrorType(err, pip_clients_processstates_node_1.ProcessStoppedExceptionV1)) {
                 this._logger.error(this.processId, err, 'Received a message for inactive process %s. Skipping...', this.name);
                 this.moveMessageToDead(callback);
                 return;

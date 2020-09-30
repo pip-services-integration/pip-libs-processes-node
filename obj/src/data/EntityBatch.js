@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EntityBatch = void 0;
 class EntityBatch {
     constructor(batchId = null, entities = null) {
         this.batch_id = batchId;
